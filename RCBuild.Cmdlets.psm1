@@ -4,6 +4,7 @@ Function New-RCBuild
         [Parameter(Mandatory=$true)]
         [string]$ProjectName,
         [string]$msbuildConfiguration = "release",
+        [Alias("nuget")]
         [switch]$pushToNugetOrg
     )
 
