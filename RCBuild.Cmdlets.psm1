@@ -3,16 +3,15 @@ Function New-RCBuild
     Param (
         [Parameter(Mandatory=$true)]
         [string]$ProjectName,
-        [string]$ProjectsRootDir = "c:\projects",
         [string]$msbuildConfiguration = "release",
         [switch]$pushToNugetOrg
     )
 
     ##*********** Init ***********##
 
-    $buildScriptDir = (Get-Item -Path ".\" -Verbose).FullName
+    $buildScriptDir = Get-ProjectDir "rcbuild"
     Write-Host "Build Script dir: $buildScriptDir"
-    $projectDir = [System.IO.Path]::Combine($ProjectsRootDir,$ProjectName).TrimEnd('\')
+    $projectDir = Get-ProjectDir $ProjectName
     Write-Host "Project dir: $projectDir"
     
     Write-Host "msbuild.configuration: $msbuildConfiguration" -ForegroundColor Cyan
@@ -66,7 +65,7 @@ Function New-RCBuild
         #clean repo for release - this will fail if everything is not committed
         #https://git-scm.com/docs/git-clean
         Write-Host "Cleaning repo for relase build"
-        git clean -d -x -f | Write-Host -ForegroundColor DarkGray
+        Reset-GitDir $projectDir | Write-Host -ForegroundColor DarkGray
 
         #patch assembly infos
         $assemblyInfos = Get-ChildItem $projectDir -Filter "AssemblyInfo.cs" -recurse | Where-Object { $_.Attributes -ne "Directory"} 
@@ -196,4 +195,42 @@ Function Undo-AssemblyInfoVersions
         Write-host "Reverting $TmpFile" -ForegroundColor DarkGray
         Move-Item  $TmpFile $o.FullName -Force
     }
+}
+
+Function Get-ProjectDir
+{
+    Param (
+        [Parameter(Mandatory=$true)]
+        [string]$ProjectName,
+        [string]$ProjectsRootDir = "c:\projects"
+    )
+
+    $projectDir = [System.IO.Path]::Combine($ProjectsRootDir,$ProjectName).TrimEnd('\')
+    if(-NOT (Test-Path($projectDir))) {
+        throw "Project dir not found: $projectDir"
+    }
+    else {
+        return $projectDir
+    }
+}
+
+Function Reset-GitDir
+{
+    Param (
+        [Parameter(Mandatory=$true)]
+        [string]$ProjectName
+    )
+
+    $projectDir = Get-ProjectDir $ProjectName
+
+    $currentDir = (Get-Location).Path
+
+    try{
+        sl $projectDir
+        git clean -d -x -f
+    } finally {
+        sl $currentDir
+    }
+
+    Write-Verbose "Git dir: $projectDir"
 }
