@@ -85,10 +85,7 @@ Function New-RCBuild
         #build sln
         Write-Host "Building $slnPath"
         & "C:\Program Files (x86)\MSBuild\14.0\Bin\amd64\MSBuild.exe" $slnPath /t:rebuild /p:Configuration=$msbuildConfiguration /verbosity:minimal | Write-Host -ForegroundColor DarkGray
-
-        #revert assembly info
-        $assemblyInfos | Undo-AssemblyInfoVersions
-
+        
         #clean artifacts dir if exists
         if(Test-Path $artifactsDir) { Remove-Item "$artifactsDir\*" -Force | Write-Host -ForegroundColor DarkGray }
         #create aritfacts dir
@@ -119,46 +116,25 @@ Function New-RCBuild
         }
 
         if($pushToNugetOrg) {
-            Push-ToNugetDotOrg $artifactsDir $buildScriptDir
-        }
+            $apiKey = Read-Host "Please enter nuget API key"
+            #https://docs.nuget.org/consume/command-line-reference
+            Get-ChildItem $artifactsDir -Filter "*.nupkg" | % { 
+                Write-Host $_.FullName
+                & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
+            }
+        }        
 
         Write-host "Build $semver20 completed!" -ForegroundColor Green
 
-    } finally {
+    } finally {        
+        #revert assembly info
+        $assemblyInfos | Undo-AssemblyInfoVersions
+
         Write-Host "Setting location $currentDir" | Write-Host -ForegroundColor DarkGray
         sl $currentDir
     }
 }
 
-Function Push-ToNugetDotOrg
-{
-    Param (
-        [Parameter(Mandatory=$true)]
-        [string]$artifactsDir,
-        [Parameter(Mandatory=$true)]
-        [string]$buildScriptDir        
-    )
-
-    #push to nuget.org
-    $message  = 'Pust to nuget.org'
-    $question = 'Do you want to publish nuget packages to nuget.org?'
-
-    $choices = New-Object Collections.ObjectModel.Collection[Management.Automation.Host.ChoiceDescription]
-    $choices.Add((New-Object Management.Automation.Host.ChoiceDescription -ArgumentList '&Yes'))
-    $choices.Add((New-Object Management.Automation.Host.ChoiceDescription -ArgumentList '&No'))
-
-    $decision = $Host.UI.PromptForChoice($message, $question, $choices, 1)
-    if ($decision -eq 0) {
-        $apiKey = Read-Host "Please enter nuget API key"
-        #https://docs.nuget.org/consume/command-line-reference
-        Get-ChildItem $artifactsDir -Filter "*.nupkg" | % { 
-            Write-Host $_.FullName
-            & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
-        }
-    } else {
-        Write-Host "Push to nuget dismissed" -ForegroundColor yellow
-    }
-}
 
 Function Update-AssemblyInfoVersions
 {
