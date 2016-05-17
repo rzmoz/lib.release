@@ -5,7 +5,8 @@ Function New-RCBuild
         [string]$ProjectName,
         [string]$msbuildConfiguration = "release",
         [Alias("nuget")]
-        [switch]$pushToNugetOrg
+        [switch]$pushToNugetOrg,
+        [switch]$disableTests
     )
 
     ##*********** Init ***********##
@@ -93,20 +94,22 @@ Function New-RCBuild
         #create aritfacts dir
         New-Item $artifactsDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
 
-        #run unit tests
-        $testAssemblies = Get-ChildItem -Path $projectDir -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
-        Write-Host $testAssemblies.FullName
-        #https://github.com/nunit/docs/wiki/Console-Command-Line
-        & "$buildScriptDir\nunit\nunit3-console.exe" $testAssemblies.FullName --framework:net-4.5 --result:$testResultsPath | Write-Host -ForegroundColor DarkGray
+        if(-NOT ($disableTests)){
+            #run unit tests
+            $testAssemblies = Get-ChildItem -Path $projectDir -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
+            Write-Host $testAssemblies.FullName
+            #https://github.com/nunit/docs/wiki/Console-Command-Line
+            & "$buildScriptDir\nunit\nunit3-console.exe" $testAssemblies.FullName --framework:net-4.5 --result:$testResultsPath | Write-Host -ForegroundColor DarkGray
 
-        #get test result
-        [xml]$testResults = Get-Content -Path $testResultsPath
-        $result = $testResults."test-run".result
-        if($result -eq "Passed") {
-        Write-Host "Unit tests: $result" -ForegroundColor Green
-        } else {
-            Write-Host "Unit tests: $result!" -ForegroundColor Red
-        }
+            #get test result
+            [xml]$testResults = Get-Content -Path $testResultsPath
+            $result = $testResults."test-run".result
+            if($result -eq "Passed") {
+            Write-Host "Unit tests: $result" -ForegroundColor Green
+            } else {
+                Write-Host "Unit tests: $result!" -ForegroundColor Red
+            }
+        }        
 
         #create nugets and place in artifacts dir
         foreach($nugetTarget in $nugetTargets.path) {
