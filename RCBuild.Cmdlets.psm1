@@ -10,8 +10,12 @@ Function New-RCBuild
 
     ##*********** Init ***********##
 
+    $currentDir =  (Get-Item -Path ".\" -Verbose).FullName
+    Write-Host "Current dir: $buildScriptDir"
+
     $buildScriptDir = Get-ProjectDir "rcbuild"
     Write-Host "Build Script dir: $buildScriptDir"
+
     $projectDir = Get-ProjectDir $ProjectName
     Write-Host "Project dir: $projectDir"
     
@@ -118,8 +122,8 @@ Function New-RCBuild
         Write-host "Build $semver20 completed!" -ForegroundColor Green
 
     } finally {
-        Write-Host "Setting location $buildScriptDir" | Write-Host -ForegroundColor DarkGray
-        sl $buildScriptDir
+        Write-Host "Setting location $currentDir" | Write-Host -ForegroundColor DarkGray
+        sl $currentDir
     }
 }
 
