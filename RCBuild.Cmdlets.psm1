@@ -91,6 +91,8 @@ Function New-RCBuild
         #create aritfacts dir
         New-Item $artifactsDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
 
+        $testsResult= "Passed";
+
         if(-NOT ($disableTests)){
             #run unit tests
             $testAssemblies = Get-ChildItem -Path $projectDir -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
@@ -100,28 +102,31 @@ Function New-RCBuild
 
             #get test result
             [xml]$testResults = Get-Content -Path $testResultsPath
-            $result = $testResults."test-run".result
-            if($result -eq "Passed") {
-            Write-Host "Unit tests: $result" -ForegroundColor Green
+            $testsResult = $testResults."test-run".result
+            if($testsResult -eq "Passed") {
+            Write-Host "Unit tests: $testsResult" -ForegroundColor Green
             } else {
-                Write-Host "Unit tests: $result!" -ForegroundColor Red
+                Write-Host "Unit tests: $testsResult!" -ForegroundColor Red
             }
         }        
 
-        #create nugets and place in artifacts dir
-        foreach($nugetTarget in $nugetTargets.path) {
-        #https://docs.nuget.org/consume/command-line-reference
-        Write-Host "Packing $nugetTarget"
-        & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $semver10 -OutputDirectory $artifactsDir  | Write-Host -ForegroundColor DarkGray
-        }
-
-        if($pushToNugetOrg) {
-            $apiKey = Read-Host "Please enter nuget API key"
-            #https://docs.nuget.org/consume/command-line-reference
-            Get-ChildItem $artifactsDir -Filter "*.nupkg" | % { 
-                Write-Host $_.FullName
-                & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
+        #create nugets if all tests passed
+        if($testsResult -eq "Passed") {
+            #create nugets and place in artifacts dir
+            foreach($nugetTarget in $nugetTargets.path) {
+                #https://docs.nuget.org/consume/command-line-reference
+                Write-Host "Packing $nugetTarget"
+                & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $semver10 -OutputDirectory $artifactsDir  | Write-Host -ForegroundColor DarkGray
             }
+
+            if($pushToNugetOrg) {
+                $apiKey = Read-Host "Please enter nuget API key"
+                #https://docs.nuget.org/consume/command-line-reference
+                Get-ChildItem $artifactsDir -Filter "*.nupkg" | % { 
+                    Write-Host $_.FullName
+                    & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
+                }
+            }        
         }        
 
         Write-host "Build $semver20 completed!" -ForegroundColor Green
