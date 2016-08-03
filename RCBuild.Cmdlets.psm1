@@ -6,6 +6,7 @@ Function New-RCBuild
         [string]$msbuildConfiguration = "release",
         [Alias("nuget")]
         [switch]$pushToNugetOrg,
+		[Alias("notests")]
         [switch]$disableTests
     )
 
