@@ -69,7 +69,7 @@ Function New-RCBuild
 
         ##*********** Build ***********##
         
-        #clean repo for release - this will fail if everything is not committed
+        #clean repo for release - this will mess things up if everything is not committed!!
         #https://git-scm.com/docs/git-clean
         Write-Host "Cleaning repo for relase build"
         Reset-GitDir $projectDir | Write-Host -ForegroundColor DarkGray
