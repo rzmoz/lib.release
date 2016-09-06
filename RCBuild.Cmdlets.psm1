@@ -1,4 +1,4 @@
-Function New-RCBuild
+Function New-Release
 {
     Param (
         [Parameter(Mandatory=$true)]
@@ -6,7 +6,7 @@ Function New-RCBuild
         [string]$msbuildConfiguration = "release",
         [Alias("nuget")]
         [switch]$pushToNugetOrg,
-		[Alias("notests")]
+		[Alias("notests","notest")]
         [switch]$disableTests
     )
 
@@ -63,7 +63,7 @@ Function New-RCBuild
         $testAssembliesFilter = $parameters."test.assemblies"
         Write-Host "test.assemblies filter: $testAssembliesFilter" -ForegroundColor Cyan
         $nugetTargets = $parameters."nuget.targets"
-        foreach($nugetTarget in $nugetTargets.path) {
+        foreach($nugetTarget in $nugetTargets) {
             Write-Host "nuget.target: $nugetTarget" -ForegroundColor Cyan
         }
 
@@ -114,7 +114,7 @@ Function New-RCBuild
         #create nugets if all tests passed
         if($testsResult -eq "Passed") {
             #create nugets and place in artifacts dir
-            foreach($nugetTarget in $nugetTargets.path) {
+            foreach($nugetTarget in $nugetTargets) {
                 #https://docs.nuget.org/consume/command-line-reference
                 Write-Host "Packing $nugetTarget"
                 & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $semver10 -OutputDirectory $artifactsDir  | Write-Host -ForegroundColor DarkGray
