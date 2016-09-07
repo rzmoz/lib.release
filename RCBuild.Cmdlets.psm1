@@ -4,8 +4,8 @@ Function New-Release
         [Parameter(Mandatory=$true)]
         [string]$ProjectName,
         [string]$msbuildConfiguration = "release",
-        [Alias("nuget")]
-        [switch]$pushToNugetOrg,
+        [Alias("nonugets","nonuget")]
+        [switch]$disableNugets,
 		[Alias("notests","notest")]
         [switch]$disableTests
     )
@@ -120,7 +120,7 @@ Function New-Release
                 & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $semver10 -OutputDirectory $artifactsDir  | Write-Host -ForegroundColor DarkGray
             }
 
-            if($pushToNugetOrg) {
+            if(-NOT ($disableNugets)) {
                 $apiKey = Read-Host "Please enter nuget API key"
                 #https://docs.nuget.org/consume/command-line-reference
                 Get-ChildItem $artifactsDir -Filter "*.nupkg" | % { 
