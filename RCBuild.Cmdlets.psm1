@@ -33,7 +33,7 @@ Function New-Release
 
     try
     {
-        $parameters = Get-Content -Raw -Path .\RC.Params.json | ConvertFrom-Json
+        $parameters = Get-Content -Raw -Path .\release.params.json | ConvertFrom-Json
 
         $artifactsDir = "$projectDir\Artifacts"
         Write-Host "aritfacts dir: $artifactsDir" -ForegroundColor Cyan
