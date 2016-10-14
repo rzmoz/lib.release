@@ -15,7 +15,7 @@ Function New-Release
     $currentDir =  (Get-Item -Path ".\" -Verbose).FullName
     Write-Host "Current dir: $buildScriptDir"
 
-    $buildScriptDir = Get-ProjectDir "rcbuild"
+    $buildScriptDir = Get-ProjectDir "lib.release"
     Write-Host "Build Script dir: $buildScriptDir"
 
     $projectDir = Get-ProjectDir $ProjectName
