@@ -2,87 +2,102 @@ Function New-Release
 {
     Param (
         [Parameter(Mandatory=$true)]
-        [string]$ProjectName,
-        [string]$msbuildConfiguration = "release",
-        [Alias("nonugets","nonuget")]
-        [switch]$disableNugets,
-		[Alias("notests","notest")]
-        [switch]$disableTests
+        [string]$solutionName,
+        [switch]$nugets = $true,
+        [string]$testAssembliesFilter = "*.tests.dll",
+        [switch]$notests = $false
     )
 
     ##*********** Init ***********##
 
     $currentDir =  (Get-Item -Path ".\" -Verbose).FullName
-    Write-Host "Current dir: $buildScriptDir"
+    Write-Host "dir.current: $currentDir" -ForegroundColor Cyan
 
     $buildScriptDir = Get-ProjectDir "lib.release"
-    Write-Host "Build Script dir: $buildScriptDir"
+    Write-Host "lib.release.dir: $buildScriptDir" -ForegroundColor Cyan
 
-    $projectDir = Get-ProjectDir $ProjectName
-    Write-Host "Project dir: $projectDir"
-    
+    $msbuildConfiguration = "release"
     Write-Host "msbuild.configuration: $msbuildConfiguration" -ForegroundColor Cyan
+    Write-Host "nugets.enabled: $nugets" -ForegroundColor Cyan
+    
+    Write-Host "##*********** sln ***********##" -ForegroundColor Cyan
 
-    if(Test-Path $projectDir){
-        Write-Host "Setting location $projectDir" | Write-Host -ForegroundColor DarkGray
-        sl $projectDir #moving location 
+    $slnDir = Get-ProjectDir $solutionName
+    Write-Host "sln.dir: $slnDir" -ForegroundColor Cyan
+    
+    $slnPath = "$slnDir\$solutionName.sln"
+    Write-Host "sln.path: $slnPath" -ForegroundColor Cyan
+
+    $releaseParams = (Get-Content -Raw -Path $slnDir\lib.release.json | ConvertFrom-Json).projects
+    Write-Host "sln.release.params:"$releaseParams -ForegroundColor Cyan    
+
+    Write-Host "##*********** test ***********##" -ForegroundColor Cyan
+
+    Write-Host "test.disabled: $notests" -ForegroundColor Cyan
+    Write-Host "test.assemblies.filter: $testAssembliesFilter" -ForegroundColor Cyan    
+
+    $artifactsDir = "$slnDir\Artifacts"
+    Write-Host "test.aritfacts.dir: $artifactsDir" -ForegroundColor Cyan
+
+    $testResultsPath = "$artifactsDir\testresults.xml"
+    Write-Host "test.artifacts.results.path: $testResultsPath" -ForegroundColor Cyan    
+        
+
+    if(Test-Path $slnDir ){        
+        sl $slnDir  #moving location 
+        Write-Host "location: $slnDir " -ForegroundColor Cyan
     } else {
-        Write-Host "$projectDir not found. Aborting.." -ForegroundColor Red
+        Write-Host "$slnDir not found. Aborting.." -ForegroundColor Red
         return
     }
 
-    try
-    {
-        $parameters = Get-Content -Raw -Path .\release.params.json | ConvertFrom-Json
+    Write-Host "##*********** git ***********##" -ForegroundColor Cyan
 
-        $artifactsDir = "$projectDir\Artifacts"
-        Write-Host "aritfacts dir: $artifactsDir" -ForegroundColor Cyan
-        $testResultsPath = "$artifactsDir\testresults.xml"
-        Write-Host "test results path: $testResultsPath" -ForegroundColor Cyan
-        $branch = git rev-parse --abbrev-ref HEAD
-        Write-Host "branch: $branch" -ForegroundColor Cyan
-        $commitHash = git rev-parse --verify HEAD
-        Write-Host "hash: $commitHash" -ForegroundColor Cyan
-        $shortHash = git log --pretty=format:'%h' -n 1
-        Write-Host "hash.short: $shortHash" -ForegroundColor Cyan
-        $versionAssembly = $parameters."version.assembly"
-        Write-Host "version.assembly: $versionAssembly" -ForegroundColor Cyan
-        $versionPrerelase= $parameters."version.prerelease"
-        Write-Host "version.prerelease: $versionPrerelase" -ForegroundColor Cyan
-        $commitsSinceInit = git rev-list --first-parent --count HEAD
-        Write-Host "# of commits: $commitsSinceInit" -ForegroundColor Cyan
-        $semver10 = $versionAssembly
-        if(-Not [string]::IsNullOrWhiteSpace($versionPrerelase)) {
-            $semver10 +="-$versionPrerelase"
-        }
-        Write-Host "semVer10: $semver10" -ForegroundColor Cyan
-        $semver20 = "$semver10+$commitsSinceInit.$commitHash"
-        Write-Host "semVer20: $semver20" -ForegroundColor Cyan
-        $slnPath = $parameters."sln.path"
-        Write-Host "sln.path: $slnPath" -ForegroundColor Cyan        
-        $testAssembliesFilter = $parameters."test.assemblies"
-        Write-Host "test.assemblies filter: $testAssembliesFilter" -ForegroundColor Cyan
-        $nugetTargets = $parameters."nuget.targets"
-        foreach($nugetTarget in $nugetTargets) {
-            Write-Host "nuget.target: $nugetTarget" -ForegroundColor Cyan
-        }
-
-        ##*********** Build ***********##
+    $branch = git rev-parse --abbrev-ref HEAD
+    Write-Host "git.branch: $branch" -ForegroundColor Cyan
         
+    $commitHash = git rev-parse --verify HEAD
+    Write-Host "git.hash: $commitHash" -ForegroundColor Cyan
+        
+    $shortHash = git log --pretty=format:'%h' -n 1
+    Write-Host "git.hash.short: $shortHash" -ForegroundColor Cyan
+
+    $commitsSinceInit = git rev-list --first-parent --count HEAD
+    Write-Host "git.commits: $commitsSinceInit" -ForegroundColor Cyan
+
+    Write-Host "##*********** projects ***********##" -ForegroundColor Cyan
+
+    $projects = New-Object System.Collections.ArrayList
+
+    foreach($projectParams in $releaseParams) {
+        $projectInfo = New-ProjectInfo -slnDir $slnDir -slnName $slnName -projectParams $projectParams        
+        $projects.Add($projectInfo)
+    }
+
+    Write-Host ($projects | Out-String) -ForegroundColor DarkGray
+
+    $assemblyInfos = $projects | % { $_."project.assemblyInfo" }
+
+    try
+    {        
+                        
+        ##*********** Build ***********##
+  
         #clean repo for release - this will mess things up if everything is not committed!!
         #https://git-scm.com/docs/git-clean
-        Write-Host "Cleaning repo for relase build"
-        Reset-GitDir $projectDir | Write-Host -ForegroundColor DarkGray
-
+        Write-Host "Cleaning repo for $msbuildConfiguration build"
+        Reset-GitDir $slnDir | Write-Host -ForegroundColor DarkGray
+        
         #patch assembly infos
-        $assemblyInfos = Get-ChildItem $projectDir -Filter "AssemblyInfo.cs" -recurse | Where-Object { $_.Attributes -ne "Directory"} 
-        $assemblyInfos | Update-AssemblyInfoVersions $versionAssembly $semver20
-
+        foreach($project in $projects){            
+            Update-AssemblyInfoVersions $project."project.assemblyInfo" $project."project.semVer10" $project."project.semVer20"
+        } 
+                
         #restore nugets
         #https://docs.nuget.org/consume/command-line-reference
         Write-Host "Restoring nuget packages"
         & "$buildScriptDir\nuget.exe" restore $slnPath | Write-Host -ForegroundColor DarkGray
-
+        
         #build sln
         Write-Host "Building $slnPath"
         & "C:\Program Files (x86)\MSBuild\14.0\Bin\amd64\MSBuild.exe" $slnPath /t:rebuild /p:Configuration=$msbuildConfiguration /verbosity:minimal | Write-Host -ForegroundColor DarkGray
@@ -92,12 +107,11 @@ Function New-Release
         #create aritfacts dir
         New-Item $artifactsDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
 
-        $testsResult= "Passed";
-
-        if(-NOT ($disableTests)){
+        $testsResult= "Passed";        
+        
+        if(-NOT ($notests)){            
             #run unit tests
-            $testAssemblies = Get-ChildItem -Path $projectDir -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
-            Write-Host $testAssemblies.FullName
+            $testAssemblies = Get-ChildItem -Path "$slnDir" -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
             #https://github.com/nunit/docs/wiki/Console-Command-Line
             & "$buildScriptDir\nunit\bin\nunit3-console.exe" $testAssemblies.FullName --framework:net-4.5 --result:$testResultsPath | Write-Host -ForegroundColor DarkGray
 
@@ -109,8 +123,9 @@ Function New-Release
             } else {
                 Write-Host "Unit tests: $testsResult!" -ForegroundColor Red
             }
+            
         }        
-
+        <#
         #create nugets if all tests passed
         if($testsResult -eq "Passed") {
             #create nugets and place in artifacts dir
@@ -131,35 +146,87 @@ Function New-Release
         }        
 
         Write-host "Build $semver20 completed!" -ForegroundColor Green
-
+        #>
     } finally {        
+        #clean artifacts dir if exists
+        if(Test-Path $artifactsDir) { Remove-Item "$artifactsDir\*" -Force | Write-Host -ForegroundColor DarkGray }
+
+        
         #revert assembly info
         $assemblyInfos | Undo-AssemblyInfoVersions
 
         Write-Host "Setting location $currentDir" | Write-Host -ForegroundColor DarkGray
         sl $currentDir
+        
     }
+}
+
+Function New-ProjectInfo
+{
+    Param (
+        [string]$slnDir,
+        [string]$slnName,
+        [PSCustomObject]$projectParams
+    )
+
+    Write-host "Processing project:"($projectParams) -ForegroundColor DarkGray
+                
+    $projectInfo = New-Object System.Collections.Hashtable
+            
+    $projectName = $solutionName+$projectParams.extension
+    $projectInfo.Add("project.name",$projectName);
+
+    $projectDir = "$slnDir\$projectName"
+    $projectInfo.Add("project.dir",$projectDir);
+
+    $projectVersion = $projectParams.version
+    $projectInfo.Add("project.version",$projectVersion);
+            
+    $semver10 = $projectVersion
+    $projectInfo.Add("project.semVer10",$semver10);
+            
+    $semver20 = "$semver10+$commitsSinceInit.$commitHash"
+    $projectInfo.Add("project.semVer20",$semver20);
+
+    $assemblyInfo = (Get-AssemblyInfos $projectDir).FullName
+    $projectInfo.Add("project.assemblyInfo",$assemblyInfo);
+
+    $nugetTarget = "$slnDir\$projectName\$projectName.csproj"
+    $projectInfo.Add("nuget.target",$nugetTarget);    
+
+    return $projectInfo    
+}
+
+Function Get-AssemblyInfos{
+    Param (
+        [Parameter(Mandatory=$true)]
+        [string]$Rootdir
+    )
+    
+    return Get-ChildItem $Rootdir -Filter "AssemblyInfo.cs" -recurse | Where-Object { $_.Attributes -ne "Directory"}
 }
 
 
 Function Update-AssemblyInfoVersions
 {
     Param (
+        [Parameter(Mandatory=$true)]
+        [string]$assemblyInfoFullName,
+        [Parameter(Mandatory=$true)]
         [string]$Version,
+        [Parameter(Mandatory=$true)]
         [string]$SemVer20
     )
   
     Write-Host "Updating AssemblyInfos"
 
-    foreach ($o in $input)
-    {
-        $fullName=$o.FullName
+        $fullName=$assemblyInfoFullName
         Write-host "Updating $fullName" -ForegroundColor DarkGray
-        $TmpFile = $o.FullName + ".tmp"   
+        $TmpFile = $assemblyInfoFullName + ".tmp"   
         Write-host "Backup: $TmpFile"  -ForegroundColor DarkGray
 
         #backup file for reverting later
-        Copy-Item $o.FullName $TmpFile
+        Copy-Item $fullName $TmpFile
 
         [regex]$patternAssemblyVersion = "(AssemblyVersion\("")(\d+\.\d+\.\d+\.\d+)(""\))"
         $replacePatternAssemblyVersion = "`${1}$($Version)`$3"
@@ -169,21 +236,23 @@ Function Update-AssemblyInfoVersions
         $replacePatternAssemblyInformationalVersion = "`${1}$($SemVer20)`$3"
 
         # run the regex replace        
-        $updated = Get-Content -Path $o.FullName |
+        $updated = Get-Content -Path $fullName |
             % { $_ -replace $patternAssemblyVersion, $replacePatternAssemblyVersion } |
             % { $_ -replace $patternAssemblyFileVersion, $replacePatternAssemblyFileVersion } |
             % { $_ -replace $patternAssemblyInformationalVersion, $replacePatternAssemblyInformationalVersion }
-        Set-Content $o.FullName -Value $updated -Force
-    }
+        Set-Content $fullName -Value $updated -Force
+    
 }
 Function Undo-AssemblyInfoVersions
 {
     Write-host "Reverting assemblyInfos"
     foreach ($o in $input)
     {
-        $TmpFile = $o.FullName + ".tmp"   
+        $TmpFile = $o + ".tmp"
         Write-host "Reverting $TmpFile" -ForegroundColor DarkGray
-        Move-Item  $TmpFile $o.FullName -Force
+        if(Test-Path($TmpFile)){            
+            Move-Item  $TmpFile $o -Force
+        }        
     }
 }
 
