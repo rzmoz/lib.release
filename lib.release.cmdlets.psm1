@@ -125,28 +125,32 @@ Function New-Release
             }
             
         }        
-        <#
+        
         #create nugets if all tests passed
         if($testsResult -eq "Passed") {
             #create nugets and place in artifacts dir
-            foreach($nugetTarget in $nugetTargets) {
+            foreach($project in $projects) {
+                $nugetTarget = $project."nuget.target"
+                $nugetVersion = $project."project.semVer10"
                 #https://docs.nuget.org/consume/command-line-reference
-                Write-Host "Packing $nugetTarget"
-                & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $semver10 -OutputDirectory $artifactsDir  | Write-Host -ForegroundColor DarkGray
+                Write-Host "Packing $nugetTarget -v $nugetVersion"
+                & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $nugetVersion  -OutputDirectory $artifactsDir  | Write-Host -ForegroundColor DarkGray
             }
 
-            if(-NOT ($disableNugets)) {
+            if(-NOT ($nonugets)) {
                 $apiKey = Read-Host "Please enter nuget API key"
                 #https://docs.nuget.org/consume/command-line-reference
                 Get-ChildItem $artifactsDir -Filter "*.nupkg" | % { 
                     Write-Host $_.FullName
                     & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
                 }
-            }        
+            }
+            Write-host "Build completed!" -ForegroundColor Green
+        }
+        else {
+            Write-host "Build failed!" -ForegroundColor Red
         }        
-
-        Write-host "Build $semver20 completed!" -ForegroundColor Green
-        #>
+        
     } finally {        
         #clean artifacts dir if exists
         if(Test-Path $artifactsDir) { Remove-Item "$artifactsDir\*" -Force | Write-Host -ForegroundColor DarkGray }
