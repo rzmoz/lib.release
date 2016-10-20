@@ -3,9 +3,10 @@ Function New-Release
     Param (
         [Parameter(Mandatory=$true)]
         [string]$solutionName,
-        [switch]$nugets = $true,
+        [switch]$nonugets = $false,        
+        [switch]$notests = $false,
         [string]$testAssembliesFilter = "*.tests.dll",
-        [switch]$notests = $false
+        [string]$msbuildConfiguration = "release"
     )
 
     ##*********** Init ***********##
@@ -14,9 +15,7 @@ Function New-Release
     Write-Host "dir.current: $currentDir" -ForegroundColor Cyan
 
     $buildScriptDir = Get-ProjectDir "lib.release"
-    Write-Host "lib.release.dir: $buildScriptDir" -ForegroundColor Cyan
-
-    $msbuildConfiguration = "release"
+    Write-Host "lib.release.dir: $buildScriptDir" -ForegroundColor Cyan       
     Write-Host "msbuild.configuration: $msbuildConfiguration" -ForegroundColor Cyan
     Write-Host "nugets.enabled: $nugets" -ForegroundColor Cyan
     
@@ -79,8 +78,7 @@ Function New-Release
     $assemblyInfos = $projects | % { $_."project.assemblyInfo" }
 
     try
-    {        
-                        
+    {                        
         ##*********** Build ***********##
   
         #clean repo for release - this will mess things up if everything is not committed!!
