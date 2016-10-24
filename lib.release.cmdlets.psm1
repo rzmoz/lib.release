@@ -111,7 +111,7 @@ Function New-Release
             #run unit tests
             $testAssemblies = Get-ChildItem -Path "$slnDir" -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
             #https://github.com/nunit/docs/wiki/Console-Command-Line
-            & "$buildScriptDir\nunit\bin\nunit3-console.exe" $testAssemblies.FullName --framework:net-4.5 --result:$testResultsPath | Write-Host -ForegroundColor DarkGray
+            & "$buildScriptDir\nunit\bin\nunit3-console.exe" $testAssemblies.FullName --stoponerror --framework:net-4.5 --result:$testResultsPath | Write-Host -ForegroundColor DarkGray
 
             #get test result
             [xml]$testResults = Get-Content -Path $testResultsPath
