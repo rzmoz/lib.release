@@ -1,4 +1,4 @@
-Function New-Release
+Function New-Lib.Release
 {
     Param (
         [Parameter(Mandatory=$true)]
