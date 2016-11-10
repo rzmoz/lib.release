@@ -18,12 +18,14 @@ Function New-Lib.Release
     Write-Host "lib.release.dir: $buildScriptDir" -ForegroundColor Cyan       
     Write-Host "msbuild.configuration: $msbuildConfiguration" -ForegroundColor Cyan
     Write-Host "nugets.enabled: $nugets" -ForegroundColor Cyan
+    $outputDir = "$slnDir\Output"
+    Write-Host "nugets.output.dir: $outputDir" -ForegroundColor Cyan
     
     Write-Host "##*********** sln ***********##" -ForegroundColor Cyan
 
     $slnDir = Get-ProjectDir $solutionName
     Write-Host "sln.dir: $slnDir" -ForegroundColor Cyan
-    
+        
     $slnPath = "$slnDir\$solutionName.sln"
     Write-Host "sln.path: $slnPath" -ForegroundColor Cyan
 
@@ -34,14 +36,11 @@ Function New-Lib.Release
 
     Write-Host "test.disabled: $notests" -ForegroundColor Cyan
     Write-Host "test.assemblies.filter: $testAssembliesFilter" -ForegroundColor Cyan    
-
-    $artifactsDir = "$slnDir\Artifacts"
-    Write-Host "test.aritfacts.dir: $artifactsDir" -ForegroundColor Cyan
-
-    $testResultsPath = "$artifactsDir\testresults.xml"
-    Write-Host "test.artifacts.results.path: $testResultsPath" -ForegroundColor Cyan    
-        
-
+       
+    $consoleRunnerPath = Get-ChildItem -Path "$slnDir\packages" -Filter xunit.console.exe -Recurse -ErrorAction SilentlyContinue -Force| Sort-Object FullName | Select-Object -Last 1
+    Write-Host "test.runner.console.path:"$consoleRunnerPath.FullName -ForegroundColor Cyan    
+    
+    
     if(Test-Path $slnDir ){        
         sl $slnDir  #moving location 
         Write-Host "location: $slnDir " -ForegroundColor Cyan
@@ -76,7 +75,7 @@ Function New-Lib.Release
     Write-Host ($projects | Out-String) -ForegroundColor DarkGray
 
     $assemblyInfos = $projects | % { $_."project.assemblyInfo" }
-
+    
     try
     {                        
         ##*********** Build ***********##
@@ -100,66 +99,68 @@ Function New-Lib.Release
         Write-Host "Building $slnPath"
         & "C:\Program Files (x86)\MSBuild\14.0\Bin\amd64\MSBuild.exe" $slnPath /t:rebuild /p:Configuration=$msbuildConfiguration /verbosity:minimal | Write-Host -ForegroundColor DarkGray
         
-        #clean artifacts dir if exists
-        if(Test-Path $artifactsDir) { Remove-Item "$artifactsDir\*" -Force | Write-Host -ForegroundColor DarkGray }
+        #clean output dir if exists
+        if(Test-Path $outputDir) { Remove-Item "$outputDir\*" -Force | Write-Host -ForegroundColor DarkGray }
         #create aritfacts dir
-        New-Item $artifactsDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
-
-        $testsResult= "Passed";        
+        New-Item $outputDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
+        
+        $testsPassed = $notests;
         
         if(-NOT ($notests)){            
-            #run unit tests
-            $testAssemblies = Get-ChildItem -Path "$slnDir" -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
-            #https://github.com/nunit/docs/wiki/Console-Command-Line
-            & "$buildScriptDir\nunit\bin\nunit3-console.exe" $testAssemblies.FullName --stoponerror --framework:net-4.5 --result:$testResultsPath | Write-Host -ForegroundColor DarkGray
-
-            #get test result
-            [xml]$testResults = Get-Content -Path $testResultsPath
-            $testsResult = $testResults."test-run".result
-            if($testsResult -eq "Passed") {
-            Write-Host "Unit tests: $testsResult" -ForegroundColor Green
-            } else {
-                Write-Host "Unit tests: $testsResult!" -ForegroundColor Red
+            if($consoleRunnerPath -eq $null) {
+                Write-Host "Unit test console runner not found! Unit tests will NOT be run" -ForegroundColor Red
+                $testsPassed=$false;
             }
-            
+            else {
+                #run unit tests
+                $testAssemblies = Get-ChildItem -Path "$slnDir" -Filter "$testAssembliesFilter" -Recurse | Where-Object { $_.FullName -like "*`\bin`\$msbuildConfiguration`\$testAssembliesFilter" -and $_.Attributes -ne "Directory" }
+
+                & $consoleRunnerPath.FullName "C:\Projects\DotNet.Basics\DotNet.Basics.Tests\bin\Release\DotNet.Basics.Tests.dll"
+
+                $testsPassed = ($lastexitcode -eq 0)
+
+                if($testsPassed){
+                    Write-Host "All tests passed" -ForegroundColor Green
+                } else {
+                    Write-Host "One ore more tests failed!" -ForegroundColor Red
+                }
+            }
         }        
         
         #create nugets if all tests passed
-        if($testsResult -eq "Passed") {
-            #create nugets and place in artifacts dir
+        if($testsPassed) {
+            #create nugets and place in output Dir dir
             foreach($project in $projects) {
                 $nugetTarget = $project."nuget.target"
                 $nugetVersion = $project."project.semVer10"
                 #https://docs.nuget.org/consume/command-line-reference
                 Write-Host "Packing $nugetTarget -v $nugetVersion"
-                & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $nugetVersion  -OutputDirectory $artifactsDir  | Write-Host -ForegroundColor DarkGray
-            }
+                & "$buildScriptDir\nuget.exe" pack $nugetTarget -Properties "Configuration=$msbuildConfiguration;Platform=AnyCPU" -version $nugetVersion  -OutputDirectory $outputDir  | Write-Host -ForegroundColor DarkGray
+            }            
 
             if(-NOT ($nonugets)) {
                 $apiKey = Read-Host "Please enter nuget API key"
                 #https://docs.nuget.org/consume/command-line-reference
-                Get-ChildItem $artifactsDir -Filter "*.nupkg" | % { 
+                Get-ChildItem $outputDir -Filter "*.nupkg" | % { 
                     Write-Host $_.FullName
                     & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
-                }
-            }
+                }                
+            }            
             Write-host "Build completed!" -ForegroundColor Green
         }
         else {
             Write-host "Build failed!" -ForegroundColor Red
         }        
-        
     } finally {        
-        #clean artifacts dir if exists
-        if(Test-Path $artifactsDir) { Remove-Item "$artifactsDir\*" -Force | Write-Host -ForegroundColor DarkGray }
+        #clean output Dir if exists
+        if(Test-Path $outputDir) { Remove-Item "$outputDir\*" -Force | Write-Host -ForegroundColor DarkGray }
 
         
         #revert assembly info
         $assemblyInfos | Undo-AssemblyInfoVersions
 
         Write-Host "Setting location $currentDir" | Write-Host -ForegroundColor DarkGray
-        sl $currentDir
-        
+        sl $currentDir        
     }
 }
 
