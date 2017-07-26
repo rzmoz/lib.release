@@ -39,8 +39,7 @@ Function New-Lib.Release
 
     Write-Host "tests.disabled: $notests" -ForegroundColor Cyan
     Write-Host "tests.filter: $testProjectFilter" -ForegroundColor Cyan    
-    
-    
+        
     if(Test-Path $slnDir ){        
         sl $slnDir  #moving location 
         Write-Host "location: $slnDir " -ForegroundColor Cyan
@@ -116,7 +115,9 @@ Function New-Lib.Release
 				
 				Write-Host "Test projects found: $testProjects" -ForegroundColor DarkGray
 
-				$testProjects | % {					
+				$testProjects | % {			
+						Write-Host "Testing $_"
+
 						$testResult = dotnet test $_.Directory.FullName --configuration $buildConfiguration --no-build
 						
 						Write-Host $testResult -ForegroundColor DarkGray
@@ -140,7 +141,7 @@ Function New-Lib.Release
             if(-NOT ($nonugets)) {
 
 				#create nugets and place in output Dir dir
-				foreach($project in $projects) {
+				foreach($project in $projects) {					
 	                $projectFile = $project."project.file"
 					$packageVersion = $project."project.semVer10"
                 
@@ -172,6 +173,7 @@ Function New-Lib.Release
         Write-Host "Setting location $currentDir" | Write-Host -ForegroundColor DarkGray
         sl $currentDir        
     }	
+	
 }
 
 Function New-ProjectInfo
@@ -195,13 +197,21 @@ Function New-ProjectInfo
     $projectDir = "$slnDir\$projectName"
     $projectInfo.Add("project.dir",$projectDir);
 
-    $projectVersion = $projectParams.version
+	$major = $projectParams.major
+	$minor = $projectParams.minor
+	
+    $projectVersion = "$major.$minor.$commitsSinceInit"
     $projectInfo.Add("project.version",$projectVersion);
             
     $semver10 = $projectVersion
     $projectInfo.Add("project.semVer10",$semver10);
-            
-    $semver20 = "$semver10+$commitsSinceInit.$commitHash"
+    
+	$prerelease  = $projectParams.prerelease
+	if(-NOT ([string]::IsNullOrEmpty($prerelease))){
+		$prerelease = "-$prerelease"
+	}
+	
+    $semver20 = "$semver10$prerelease+$shortHash"
     $projectInfo.Add("project.semVer20",$semver20);
 	
     return $projectInfo    
@@ -289,7 +299,7 @@ Function Update-ProjectVersion
         [Parameter(Mandatory=$true)]
         [string]$ProjectFullName,
         [Parameter(Mandatory=$true)]
-        [string]$Version,
+        [string]$SemVer10,
         [Parameter(Mandatory=$true)]
         [string]$SemVer20
     )
@@ -328,8 +338,8 @@ Function Update-ProjectVersion
 
 	#update versions
 	$propertyGroupNode.SelectSingleNode("//Version").InnerText = $SemVer20
-	$propertyGroupNode.SelectSingleNode("//AssemblyVersion").InnerText = $Version
-	$propertyGroupNode.SelectSingleNode("//FileVersion").InnerText = $Version
+	$propertyGroupNode.SelectSingleNode("//AssemblyVersion").InnerText = $SemVer10
+	$propertyGroupNode.SelectSingleNode("//FileVersion").InnerText = $SemVer10
 		
 	#write to project file
     $xml.Save($fullName)	
