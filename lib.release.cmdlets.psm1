@@ -4,10 +4,9 @@ Function Get-Lib.Release.Configuration
     Param (
         [Parameter(Mandatory=$true)]
         [string]$solutionName,
-        [string]$testProjectFilter = "*.tests.csproj",
+        [string]$testFilter = "*.tests.csproj",
         [string]$buildConfiguration = "release",
-        [string]$projectsRootdir = "c:\projects",
-        [switch]$expand = $true
+        [string]$projectsRootdir = "c:\projects"
     )
 	PROCESS {
 
@@ -38,11 +37,69 @@ Function Get-Lib.Release.Configuration
         
         $conf.Build = $build;
 
+        #----- test -----#
+        [hashtable]$test = @{}
+        $test.Filter = $testFilter
+        $test.Disabled = $false
+        
+        $conf.Test = $test;
+
+        #----- nuget -----#
+        [hashtable]$nuget = @{}
+        $nuget.Disabled = $false
+        
+        $conf.Nuget= $nuget;
+
+        #----- Expand -----#
+        $conf = $conf | Expand-Lib.Release.Configuration
+
+        if($conf -eq $null){
+            return
+        }
+        
         $conf | Write-Lib.Release.Configuration
 
         return $conf
     }
 }
+
+Function Expand-Lib.Release.Configuration
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, 
+        Mandatory=$true, 
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [HashTable]$conf
+        
+    )
+    PROCESS {
+
+        if(Test-Path $conf.Solution.Dir){        
+            sl $conf.Solution.Dir  #moving location 
+            
+        } else {
+            Write-Error "$($conf.Solution.Dir) not found. Aborting..."
+            return $null
+        }
+
+        #----- git -----#
+        [hashtable]$git = @{}
+        $git.Branch = git rev-parse --abbrev-ref HEAD
+        $git.Hash = git rev-parse --verify HEAD
+        $git.ShortHash = git log --pretty=format:'%h' -n 1
+        $git.Commits = git rev-list --all --count $git.Branch
+
+        $conf.Git = $git;
+
+        #----- release -----#
+        $conf.Release.Params = Get-Content -Raw -Path $conf.Release.ParamsPath | ConvertFrom-Json
+
+        return $conf        
+    }
+}
+
 
 Function Write-Lib.Release.Configuration
 {
@@ -59,7 +116,7 @@ Function Write-Lib.Release.Configuration
         foreach ($conf in $configuration.GetEnumerator()) {
             if($conf.Value.GetType().fullname -eq "System.Collections.HashTable"){
                 foreach ($param in $conf.Value.GetEnumerator()) {
-                    Write-Verbose "$($conf.Key).$($param.Key) : $($param.Value)"    
+                    Write-Verbose "$($conf.Key).$($param.Key) : $($param.Value)"
                 }
             } else{
                 Write-Verbose "$($conf.Key) : $($conf.Value)"    
