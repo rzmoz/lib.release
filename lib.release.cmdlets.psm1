@@ -1,5 +1,76 @@
+Function Get-Lib.Release.Configuration
+{
+	[CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$true)]
+        [string]$solutionName,
+        [string]$testProjectFilter = "*.tests.csproj",
+        [string]$buildConfiguration = "release",
+        [string]$projectsRootdir = "c:\projects",
+        [switch]$expand = $true
+    )
+	PROCESS {
+
+        [hashtable]$conf = @{}
+        
+        #----- system ------#
+        $conf.CurrentDir = (Get-Item -Path ".\" -Verbose).FullName
+        
+        #----- sln -----#
+        [hashtable]$sln = @{}
+
+        $sln.Name = $solutionName.Trim('.','\')
+        $sln.Dir = [System.IO.Path]::Combine($projectsRootdir,$sln.Name).TrimEnd('\')
+        $sln.Path = "$($sln.Dir)\$($sln.Name).sln"
+        
+        $conf.Solution = $sln
+
+        #----- release -----#
+        [hashtable]$release = @{}
+        $release.ParamsPath = "$($conf.Solution.Dir)\lib.release.json"
+        $release.OutputDir = "$($conf.Solution.Dir)\Lib.Release.Output"
+                
+        $conf.Release= $release;
+
+        #----- msbuild -----#
+        [hashtable]$build = @{}
+        $build.Configuration = $buildConfiguration
+        
+        $conf.Build = $build;
+
+        $conf | Write-Lib.Release.Configuration
+
+        return $conf
+    }
+}
+
+Function Write-Lib.Release.Configuration
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, 
+        Mandatory=$true, 
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [HashTable]$configuration
+        
+    )
+    PROCESS {
+        foreach ($conf in $configuration.GetEnumerator()) {
+            if($conf.Value.GetType().fullname -eq "System.Collections.HashTable"){
+                foreach ($param in $conf.Value.GetEnumerator()) {
+                    Write-Verbose "$($conf.Key).$($param.Key) : $($param.Value)"    
+                }
+            } else{
+                Write-Verbose "$($conf.Key) : $($conf.Value)"    
+            }            
+        }
+    }
+}
+
 Function New-Lib.Release
 {
+	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
         [string]$solutionName,
@@ -8,6 +79,7 @@ Function New-Lib.Release
         [string]$testProjectFilter = "*.tests.csproj",
         [string]$buildConfiguration = "release"
     )
+	PROCESS {
 
     ##*********** Init ***********##
 
@@ -71,22 +143,22 @@ Function New-Lib.Release
         $projects.Add($projectInfo)
     }
 
-    Write-Host ($projects | Out-String) -ForegroundColor DarkGray
-
-	#verify all changes are committed before proceeding	
-	if(Get-GitStatus $slnDir){
-		Write-Host "Git status is clean. good to go"
-	} else {
-		Write-Host "Git status not ready to release. Are all changes committed?"  -ForegroundColor Red
-		return -1
-	}
-	
+    Write-Host ($projects | Out-String) -ForegroundColor DarkGray	
 	$projectFiles = $projects | % { $_."project.file" }
 
 	##*********** Generate lib release package(s) ***********##
     try
 	{
 	
+		#git clean pre-conditions: git status is ready for deployment
+		#verify all changes are committed before proceeding	
+	    if(Get-GitStatus $slnDir){
+    		Write-Host "Git status is clean. good to go"
+	    } else {
+    		Write-Host "Git status not ready to release. Are all changes committed?"  -ForegroundColor Red
+		    return -1
+	    }
+
         #clean repo for release - this will mess things up if everything is not committed!		
         #https://git-scm.com/docs/git-clean
         Write-Host "Cleaning repo for $buildConfiguration build"
@@ -173,17 +245,20 @@ Function New-Lib.Release
         Write-Host "Setting location $currentDir" | Write-Host -ForegroundColor DarkGray
         sl $currentDir        
     }	
+	}
 	
 }
 
 Function New-ProjectInfo
 {
+	[CmdletBinding()]
     Param (
         [string]$slnDir,
         [string]$slnName,
         [PSCustomObject]$projectParams
     )
 
+	PROCESS {
     Write-host "Processing project:"($projectParams) -ForegroundColor DarkGray
                 
     $projectInfo = New-Object System.Collections.Hashtable
@@ -215,6 +290,7 @@ Function New-ProjectInfo
     $projectInfo.Add("project.semVer20",$semver20);
 	
     return $projectInfo    
+	}
 }
 
 Function Restore-Project
@@ -224,18 +300,21 @@ Param (
         [string]$ProjectPath
     )
 
+	PROCESS {
 	Write-Host "Restoring $ProjectPath"
 	dotnet restore $ProjectPath | Write-Host -ForegroundColor DarkGray
+	}
 }
 
 Function Get-ProjectDir
 {
+	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
         [string]$ProjectName,
         [string]$ProjectsRootDir = "c:\projects"
     )
-
+	PROCESS {
     $projectDir = [System.IO.Path]::Combine($ProjectsRootDir,$ProjectName).TrimEnd('\')
     if(-NOT (Test-Path($projectDir))) {
         throw "Project dir not found: $projectDir"
@@ -243,15 +322,17 @@ Function Get-ProjectDir
     else {
         return $projectDir
     }
+	}
 }
 
 Function Get-GitStatus
 {
+	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
         [string]$ProjectName
     )
-
+	PROCESS {
     $projectDir = Get-ProjectDir $ProjectName
 
     $currentDir = (Get-Location).Path
@@ -269,16 +350,19 @@ Function Get-GitStatus
 		}
 	} finally {
         sl $currentDir
-    }   
+    }  
+	}
 }
 
 Function Reset-GitDir
 {
+	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
         [string]$ProjectName
     )
 
+	PROCESS {
     $projectDir = Get-ProjectDir $ProjectName
 
     $currentDir = (Get-Location).Path
@@ -291,10 +375,12 @@ Function Reset-GitDir
     }
 
     Write-Verbose "Git dir: $projectDir"
+	}
 }
 
 Function Update-ProjectVersion
 {
+	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
         [string]$ProjectFullName,
@@ -304,6 +390,7 @@ Function Update-ProjectVersion
         [string]$SemVer20
     )
   
+	PROCESS {
     Write-Host "Updating project version for $ProjectFullName"
 
     $fullName = $ProjectFullName
@@ -343,10 +430,15 @@ Function Update-ProjectVersion
 		
 	#write to project file
     $xml.Save($fullName)	
+	}
 }
 
 Function Undo-ProjectVersion
 {
+	[CmdletBinding()]
+	Param (
+    )
+
     Write-host "Reverting project version"
     foreach ($o in $input)
     {
