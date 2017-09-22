@@ -25,24 +25,37 @@ Function New-Lib.Release
         Write-Lib.Release.Configuration $conf
         
         Invoke-InDir $conf.Solution.Dir {
-            
-            ######### Initialize Git Dir #########    
-            $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
-            $gitStatus = git status | Out-String
-		    if($gitStatus -imatch $gitGoodToGoNeedle){                
-                Write-HostIfVerbose "Cleaning $((Get-Location).Path)" -ForegroundColor Gray 
-    		    #clean
-                git clean -d -x -f | Out-String | Write-HostIfVerbose
-                Write-HostIfVerbose "$((Get-Location).Path) cleaned" -ForegroundColor Gray 
+            try{
+                ######### Initialize Git Dir #########    
+                $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
+                $gitStatus = git status | Out-String
+		        if($gitStatus -imatch $gitGoodToGoNeedle){                
+                    Write-HostIfVerbose "Cleaning $((Get-Location).Path)" -ForegroundColor Gray 
+    		        #clean
+                    git clean -d -x -f | Out-String | Write-HostIfVerbose
+                    Write-HostIfVerbose "$((Get-Location).Path) cleaned" -ForegroundColor Gray 
                 
-		    } else {
-                Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
-                Write-Host "$($gitStatus)" -ForegroundColor White
-                return
-            }
+    		    } else {
+                    Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
+                    Write-Host "$($gitStatus)" -ForegroundColor White
+                    return
+                }
 
-            #restore projects
-            $conf.Projects.Values | % { $_.Path } | Restore-Project
+                #restore projects
+                $conf.Projects.Values | % { $_.Path } | Restore-Project
+
+
+                #patch project version
+                $conf.Projects.Values | % { Update-ProjectVersion $_.Path $_.SemVer10 $_.SemVer20 }
+            
+            } finally {
+                #clean output Dir if exists
+                if(Test-Path $conf.Nuget.OutputDir) { Remove-Item "$($conf.Nuget.OutputDir)\*" -Force | Write-Host -ForegroundColor DarkGray }
+		        if(Test-Path $conf.Nuget.OutputDir) { Remove-Item "$($conf.Nuget.OutputDir)" -Force | Write-Host -ForegroundColor DarkGray }
+
+		        #revert project version
+                $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion            
+            }
         }
     }
 
@@ -223,8 +236,7 @@ Function New-Lib.Release.Arkiv
 	##*********** Generate lib release package(s) ***********##
     try
 	{
-		#patch project version
-        $projects| %{ Update-ProjectVersion $_."project.file" $_."project.semVer10" $_."project.semVer20"}
+		
 				
         #build sln
         Write-Host "Building $slnPath"
@@ -347,53 +359,50 @@ Function Update-ProjectVersion
 	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
-        [string]$ProjectFullName,
+        [string]$Path,
         [Parameter(Mandatory=$true)]
         [string]$SemVer10,
         [Parameter(Mandatory=$true)]
         [string]$SemVer20
     )
   
-	PROCESS {
-    Write-Host "Updating project version for $ProjectFullName"
+	Process {
+        Write-HostIfVerbose "Updating $Path" -ForegroundColor DarkGray
+        $TmpFile = $Path + ".tmp"   
+        Write-HostIfVerbose "Backup: $TmpFile"  -ForegroundColor DarkGray
 
-    $fullName = $ProjectFullName
-    Write-host "Updating $fullName" -ForegroundColor DarkGray
-    $TmpFile = $ProjectFullName + ".tmp"   
-    Write-host "Backup: $TmpFile"  -ForegroundColor DarkGray
+        #backup file for reverting later
+        Copy-Item $Path $TmpFile
 
-    #backup file for reverting later
-    Copy-Item $fullName $TmpFile
+	    #load project xml
+	    [xml]$xml = Get-Content -Path $Path
 
-	#load project xml
-	[xml]$xml = Get-Content -Path $fullName 
-
-	#ensure version nodes exist
-	$propertyGroupNode = $xml.SelectSingleNode("//Project/PropertyGroup")
-	if ($propertyGroupNode -eq $null) {
-		Write-Host "csproj format not recognized. Is this a valid VS 17 project file?" |-ForegroundColor Red
-		return
-	}
+	    #ensure version nodes exist
+	    $propertyGroupNode = $xml.SelectSingleNode("//Project/PropertyGroup")
+	    if ($propertyGroupNode -eq $null) {
+    		Write-Host "csproj format not recognized. Is this a valid VS 17 project file?" |-ForegroundColor Red
+		    return
+	    }
 		
-	if ($propertyGroupNode.Version -eq $null) {
-		$propertyGroupNode.AppendChild($xml.CreateElement("Version")) | Write-Host -ForegroundColor DarkGray
-	}
+	    if ($propertyGroupNode.Version -eq $null) {
+    		$propertyGroupNode.AppendChild($xml.CreateElement("Version")) | Write-Host -ForegroundColor DarkGray
+    	}
 
-	if ($propertyGroupNode.AssemblyVersion -eq $null) {
-		$propertyGroupNode.AppendChild($xml.CreateElement("AssemblyVersion"))| Write-Host -ForegroundColor DarkGray
-	}
+	    if ($propertyGroupNode.AssemblyVersion -eq $null) {
+    		$propertyGroupNode.AppendChild($xml.CreateElement("AssemblyVersion"))| Write-Host -ForegroundColor DarkGray
+    	}
 	
-	if ($propertyGroupNode.FileVersion -eq $null) {
-		$propertyGroupNode.AppendChild($xml.CreateElement("FileVersion"))| Write-Host -ForegroundColor DarkGray
-	}
+	    if ($propertyGroupNode.FileVersion -eq $null) {
+    		$propertyGroupNode.AppendChild($xml.CreateElement("FileVersion"))| Write-Host -ForegroundColor DarkGray
+    	}
 
-	#update versions
-	$propertyGroupNode.SelectSingleNode("//Version").InnerText = $SemVer20
-	$propertyGroupNode.SelectSingleNode("//AssemblyVersion").InnerText = $SemVer10
-	$propertyGroupNode.SelectSingleNode("//FileVersion").InnerText = $SemVer10
+	    #update versions
+	    $propertyGroupNode.SelectSingleNode("//Version").InnerText = $SemVer20
+	    $propertyGroupNode.SelectSingleNode("//AssemblyVersion").InnerText = $SemVer10
+	    $propertyGroupNode.SelectSingleNode("//FileVersion").InnerText = $SemVer10
 		
-	#write to project file
-    $xml.Save($fullName)	
+    	#write to project file
+        $xml.Save($Path)	
 	}
 }
 
@@ -401,16 +410,21 @@ Function Undo-ProjectVersion
 {
 	[CmdletBinding()]
 	Param (
-    )
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
+        [String]$Path
+        )
 
-    Write-HostIfVerbose "Reverting project version" -ForegroundColor Gray
-    $input | % { $TmpFile = $_ + ".tmp"
-        Write-HostIfVerbose "Reverting $TmpFile to $_"
-        if(Test-Path($TmpFile)){            
-            Move-Item $TmpFile $_ -Force
-        }        
-    }
+    Process{
+        $Path | % { 
+            $TmpFile = $_ + ".tmp"
+            Write-HostIfVerbose "Reverting $TmpFile"
+            if(Test-Path($TmpFile)){
+                Move-Item $TmpFile $_ -Force
+            }        
+        }
+    }    
 }
+
 ########################################################################
 #                             PS Foundation                            #
 ########################################################################
@@ -495,5 +509,3 @@ Function Test-Verbose {
     param()
     [System.Management.Automation.ActionPreference]::SilentlyContinue -ne $VerbosePreference
 }
-
-
