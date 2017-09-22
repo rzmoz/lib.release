@@ -1,77 +1,180 @@
-Function Get-Lib.Release.Configuration
+Function New-Lib.Release
+{
+    [CmdletBinding()]
+    Param (
+        [string]$solutionName = "netcore.basics",
+        [switch]$nonugets = $false,
+        [switch]$notests = $false,
+        [string]$testProjectFilter = "*.tests.csproj",
+        [string]$buildConfiguration = "release"
+    )
+
+    Begin{
+    }
+
+    Process {
+        $conf = Initialize-Lib.Release.Configuration $solutionName | Expand-Lib.Release.Configuration
+
+        if(
+            ((Test-PathVerbose $conf.Solution.Dir) -eq $false)
+        ){
+            Write-Host "Aborting...!" -ForegroundColor Red -BackgroundColor Black
+            return;
+        }
+        
+        Write-Lib.Release.Configuration $conf
+
+        ######### Initialize Git Dir #########
+        Invoke-InDir $conf.Solution.Dir {
+            
+            $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
+
+            $gitStatus = git status | Out-String
+
+		    if($gitStatus -imatch $gitGoodToGoNeedle){
+                
+                Write-HostIfVerbose "Cleaning $((Get-Location).Path)" -ForegroundColor Gray 
+    		    #clean
+                git clean -d -x -f | Out-String | Write-HostIfVerbose
+                Write-HostIfVerbose "$((Get-Location).Path) cleaned" -ForegroundColor Gray 
+                
+		    } else {
+                Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
+                Write-Host "$($gitStatus)" -ForegroundColor White
+            }            
+        }        
+        
+        #$conf.ProjectFiles = $conf.Projects | % { $_."project.file" }
+    }
+
+    End{        
+    }
+}
+
+########################################################################
+#                             Configuration                            #
+########################################################################
+
+
+Function Initialize-Lib.Release.Configuration
 {
 	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
         [string]$solutionName,        
         [string]$buildConfiguration = "release",
-        [string]$testsSuffix = ".tests",
+        [string]$testProjectsSuffix = ".tests",
         [string]$projectsRootdir = "c:\projects"
     )
 	PROCESS {
 
-        [hashtable]$conf = @{}
-        
-        #----- system ------#
-        $conf.CurrentDir = (Get-Item -Path ".\" -Verbose).FullName
+        [HashTable]$conf = @{}
         
         #----- sln -----#
-        [hashtable]$conf.Solution = @{}
-
+        [HashTable]$conf.Solution = @{}
         $conf.Solution.Name = $solutionName.Trim('.','\')
         $conf.Solution.Dir = [System.IO.Path]::Combine($projectsRootdir,$conf.Solution.Name).TrimEnd('\')
         $conf.Solution.Path = "$($conf.Solution.Dir)\$($conf.Solution.Name).sln"        
         
         #----- msbuild -----#
-        [hashtable]$conf.Build = @{}
+        [HashTable]$conf.Build = @{}
         $conf.Build.Configuration = $buildConfiguration        
 
         #----- test -----#
-        [hashtable]$conf.Test = @{}
-        $conf.Test.ProjectsFilter = $testProjectsFilter
+        [HashTable]$conf.Test = @{}
+        $conf.Test.ProjectsSuffix = $testProjectsSuffix
         $conf.Test.Disabled = $false        
 
         #----- nuget -----#
         [hashtable]$conf.Nuget = @{}
         $conf.Nuget.OutputDir = "$($conf.Solution.Dir)\Lib.Release.Output"
-        $conf.Nuget.Disabled = $false        
-
-        ####----- Expanding Configurations -----####
-        if(Test-Path $conf.Solution.Dir){        
-            sl $conf.Solution.Dir  #moving location             
-        } else {
-            Write-Error "$($conf.Solution.Dir) not found. Aborting..."
-            return
-        }
-        
-        #----- release -----#
-        [hashtable]$conf.Release = @{}                
-        $conf.Release.Params = Get-Content -Raw -Path "$($conf.Solution.Dir)\lib.release.json"  | ConvertFrom-Json
-        
-        #----- git -----#
-        [hashtable]$conf.Git = @{}
-        $conf.Git.Branch = git rev-parse --abbrev-ref HEAD
-        $conf.Git.Hash = git rev-parse --verify HEAD
-        $conf.Git.ShortHash = git log --pretty=format:'%h' -n 1
-        $conf.Git.Commits = git rev-list --all --count $conf.Git.Branch
-        
-        #----- projects -----#
-        
-        [hashtable]$conf.Projects = @{}        
-        foreach($releaseParams in $conf.Release.Params) {
-            $pInfo = New-ProjectInfo $conf $releaseParams
-            $conf.Projects.Add($pInfo.Name,$pInfo)
-        }
-
-        #$conf.ProjectFiles = $conf.Projects | % { $_."project.file" }
-        
-        Write-Lib.Release.Configuration $conf
+        $conf.Nuget.Disabled = $false
 
         return $conf
     }
 }
 
-Function New-ProjectInfo
+Function Expand-Lib.Release.Configuration
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, 
+        Mandatory=$true, 
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [Alias('Configuration')]
+        [HashTable]$conf
+    )
+    PROCESS {        
+
+        #----- msbuild -----#
+        [HashTable]$conf.System = @{}
+        $conf.System.CurrentDir = (Get-Location).Path
+        $conf.System.ScriptDir = $PSScriptRoot
+
+        #----- release -----#
+        [HashTable]$conf.Release = @{}
+        $conf.Release.Params = Get-Content -Raw -Path "$($conf.Solution.Dir)\lib.release.json"  | ConvertFrom-Json
+        
+        #----- git -----#
+        [HashTable]$conf.Git = @{}
+
+        Invoke-InDir $conf.Solution.Dir {
+            $conf.Git.Branch = git rev-parse --abbrev-ref HEAD
+            $conf.Git.Hash = git rev-parse --verify HEAD
+            $conf.Git.ShortHash = git log --pretty=format:'%h' -n 1
+            $conf.Git.Commits = git rev-list --all --count $conf.Git.Branch
+        }        
+        
+        #----- projects -----#
+        
+        [HashTable]$conf.Projects = @{}        
+        foreach($releaseParams in $conf.Release.Params) {
+            $pInfo = Get-ProjectInfo $conf $releaseParams
+            $conf.Projects.Add($pInfo.Name,$pInfo)
+        }
+
+        return $conf
+    }
+}
+
+Function Write-Lib.Release.Configuration
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [HashTable]$configuration,
+        [Parameter(Position=1)]
+        [Int]$level = 0
+    )
+    Process {
+        if ((Test-Verbose) -ne $true){
+            return
+        }
+
+        $level++
+
+        $spacer = ""
+        for($i=0; $i -lt $level; $i++){
+            $spacer += "  "
+        }
+
+        foreach ($conf in $configuration.GetEnumerator()) {
+      
+            $confType = $conf.Value.GetType().fullname            
+            
+            if($confType -eq "System.Collections.HashTable"){
+                Write-Host "$($spacer)[$($conf.Key)]" -ForegroundColor Gray
+                Write-Lib.Release.Configuration $conf.Value $level
+            }
+            else {
+                Write-Host "$($spacer)$($conf.Key) : $($conf.Value)" -ForegroundColor DarkGray
+            }            
+        }
+    }
+}
+
+Function Get-ProjectInfo
 {
 	[CmdletBinding()]
     Param (
@@ -85,17 +188,17 @@ Function New-ProjectInfo
 
 	PROCESS {
 
-        [hashtable]$pInfo = @{}
+        [HashTable]$pInfo = @{}
         $pInfo.Name = "$($releaseParams.name)"
         $pInfo.TestName = "$($pInfo.Name).tests"
         $pInfo.Dir = "$($conf.Solution.Dir)\$($pInfo.Name)"
         $pInfo.Path = "$($pInfo.Dir)\$($pInfo.Name).csproj"
         $pInfo.Major = $releaseParams.major
         $pInfo.Minor = $releaseParams.minor
-        $pInfo.Version = "$($pInfo.Major).$($pInfo.Minor).$($conf.Commits)"
+        $pInfo.Version = "$($pInfo.Major).$($pInfo.Minor).$($conf.Git.Commits)"
         $pInfo.SemVer10 = $pInfo.Version    
             
-	    if(-NOT ([string]::IsNullOrEmpty($releaseParams.prerelease))){
+	    if(-NOT ([String]::IsNullOrEmpty($releaseParams.prerelease))){
 		    $releaseParams.prerelease= "-$($releaseParams.prerelease)"
 	    }
     
@@ -105,21 +208,18 @@ Function New-ProjectInfo
 	}
 }
 
-Function New-Lib.Release
+Function New-Lib.Release.Arkiv
 {
 	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
-        [string]$solutionName,
-        [switch]$nonugets = $false,        
-        [switch]$notests = $false,
-        [string]$testProjectFilter = "*.tests.csproj",
-        [string]$buildConfiguration = "release"
+        [String]$solutionName,
+        [Switch]$nonugets = $false,        
+        [Switch]$notests = $false,
+        [String]$testProjectFilter = "*.tests.csproj",
+        [String]$buildConfiguration = "release"
     )
 	PROCESS {
-
-    ##*********** Init ***********##
-    $conf = Get-Lib.Release.Configuration     
 
 	##*********** Generate lib release package(s) ***********##
     try
@@ -127,9 +227,9 @@ Function New-Lib.Release
 		#git clean pre-conditions: git status is ready for deployment
 		#verify all changes are committed before proceeding	
 	    if(Get-GitStatus $slnDir){
-    		Write-Host "Git status is clean. good to go"
+    		Write-HostIfVerbose "Git status is clean. good to go"
 	    } else {
-    		Write-Host "Git status not ready to release. Are all changes committed?"  -ForegroundColor Red
+    		Write-HostIfVerbose "Git status not ready to release. Are all changes committed?"  -ForegroundColor Red
 		    return -1
 	    }
 
@@ -227,12 +327,12 @@ Function Restore-Project
 {
 Param (
         [Parameter(Mandatory=$true)]
-        [string]$ProjectPath
+        [String]$ProjectPath
     )
 
-	PROCESS {
-	Write-Host "Restoring $ProjectPath"
-	dotnet restore $ProjectPath | Write-Host -ForegroundColor DarkGray
+	Process{
+	    Write-Host "Restoring $ProjectPath"
+	    dotnet restore $ProjectPath | Write-Host -ForegroundColor DarkGray
 	}
 }
 
@@ -244,69 +344,21 @@ Function Get-ProjectDir
         [string]$ProjectName,
         [string]$ProjectsRootDir = "c:\projects"
     )
-	PROCESS {
-    $projectDir = [System.IO.Path]::Combine($ProjectsRootDir,$ProjectName).TrimEnd('\')
-    if(-NOT (Test-Path($projectDir))) {
-        throw "Project dir not found: $projectDir"
-    }
-    else {
-        return $projectDir
-    }
+	Process {
+        $projectDir = [System.IO.Path]::Combine($ProjectsRootDir,$ProjectName).TrimEnd('\')
+        if(-NOT (Test-Path($projectDir))) {
+            throw "Project dir not found: $projectDir"
+        }
+        else {
+            return $projectDir
+        }
 	}
 }
 
-Function Get-GitStatus
-{
-	[CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$true)]
-        [string]$ProjectName
-    )
-	PROCESS {
-    $projectDir = Get-ProjectDir $ProjectName
+########################################################################
+#                            Project Version                           #
+########################################################################
 
-    $currentDir = (Get-Location).Path
-
-    try{
-        sl $projectDir
-		Write-Host "Asserting Git status is ready for release" -ForegroundColor DarkGray
-        $gitStatus = git status | Out-String 
-		Write-Host $gitStatus -ForegroundColor DarkGray
-		
-		if($gitStatus -imatch 'nothing to commit, working tree clean'){
-			return $true
-		} else {			
-			return $false
-		}
-	} finally {
-        sl $currentDir
-    }  
-	}
-}
-
-Function Reset-GitDir
-{
-	[CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$true)]
-        [string]$ProjectName
-    )
-
-	PROCESS {
-    $projectDir = Get-ProjectDir $ProjectName
-
-    $currentDir = (Get-Location).Path
-
-    try{
-        sl $projectDir
-        git clean -d -x -f
-    } finally {
-        sl $currentDir
-    }
-
-    Write-Verbose "Git dir: $projectDir"
-	}
-}
 
 Function Update-ProjectVersion
 {
@@ -379,31 +431,109 @@ Function Undo-ProjectVersion
         }        
     }
 }
+########################################################################
+#                             PS Foundation                            #
+########################################################################
+
+Function Enter-Dir
+{
+    [CmdletBinding()]
+    Param (                
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
+        [String]$Path,
+        [Parameter(Position=1)]
+        [String]$ExitPath = (Get-Location).Path
+    )
+    Process {
+        if( Test-Path $Path){
+            sl $Path
+            Write-HostIfVerbose "Entered: $Path From $ExitPath"
+            return $true
+        } else {
+            Write-Error "$Path not entered: Not found!"
+            return $false
+        }
+    }
+}
+
+Function Invoke-InDir
+{
+    [CmdletBinding()]
+    Param (                
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
+        [String]$Path,
+        [Parameter(Position=1, Mandatory=$true)]
+        [Scriptblock]$Script,
+        [Parameter(Position=2)]
+        [String]$ExitPath = (Get-Location).Path
+    )
+    PROCESS {
+
+        $pathEntered = $false
+
+        try{
+            if( Test-Path $Path){
+                sl $Path
+                $pathEntered = $true
+                Write-HostIfVerbose "Entered: $($Path) From $ExitPath"               
+
+                $Script.InvokeReturnAsIs()
+            }
+            else {
+                Write-HostIfVerbose "Not Entered: $($Path)"
+                return 
+            }
+        } finally {
+            if($pathEntered){
+                sl $ExitPath
+                Write-HostIfVerbose "Exited: $($Path) To $ExitPath"
+            }            
+        }        
+    }
+}
 
 
-Function Write-Lib.Release.Configuration
+Function Write-HostIfVerbose
 {
     [CmdletBinding()]
     Param (
-        [Parameter(Mandatory=$true)]        
-        [HashTable]$configuration
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [String]$message,
+        [ConsoleColor]$ForegroundColor = [ConsoleColor]::DarkGray,
+        [ConsoleColor]$BackgroundColor
     )
-    PROCESS {
-        foreach ($conf in $configuration.GetEnumerator()) {
-      
-            $confType = $conf.Value.GetType().fullname            
-            
-            if($confType -eq "System.Collections.HashTable"){
-                
-                $conf.Value.GetEnumerator() | foreach { Write-Verbose "$($conf.Key).$($_.Key) : $($_.Value)"}
+    Process {
+        if(Test-Verbose) {
+            if($BackgroundColor) {
+                Write-Host $message -ForegroundColor $ForegroundColor -BackgroundColor $BackgroundColor
+            } else {
+                Write-Host $message -ForegroundColor $ForegroundColor
+             
             }
-            elseif($confType -eq "System.Collections.ArrayList"){
-                
-                $conf.GetEnumerator()| foreach{ Write-Verbose "$($_)" }
-                
-            } else{
-                Write-Verbose "$($conf.Key) : $($conf.Value)"    
-            }            
         }
     }
+}
+
+Function Test-PathVerbose
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [String]$path
+    )
+    PROCESS {
+
+        if(Test-Path $path){
+            return $true
+        } else {
+            Write-Error "$($path) not found!"
+            return $false
+        }
+    }
+}
+
+Function Test-Verbose {
+    [CmdletBinding()]
+    param()
+    [System.Management.Automation.ActionPreference]::SilentlyContinue -ne $VerbosePreference
 }
