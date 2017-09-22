@@ -23,16 +23,13 @@ Function New-Lib.Release
         }
         
         Write-Lib.Release.Configuration $conf
-
-        ######### Initialize Git Dir #########
+        
         Invoke-InDir $conf.Solution.Dir {
             
+            ######### Initialize Git Dir #########    
             $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
-
             $gitStatus = git status | Out-String
-
-		    if($gitStatus -imatch $gitGoodToGoNeedle){
-                
+		    if($gitStatus -imatch $gitGoodToGoNeedle){                
                 Write-HostIfVerbose "Cleaning $((Get-Location).Path)" -ForegroundColor Gray 
     		    #clean
                 git clean -d -x -f | Out-String | Write-HostIfVerbose
@@ -41,10 +38,12 @@ Function New-Lib.Release
 		    } else {
                 Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
                 Write-Host "$($gitStatus)" -ForegroundColor White
-            }            
-        }        
-        
-        #$conf.ProjectFiles = $conf.Projects | % { $_."project.file" }
+                return
+            }
+
+            #restore projects
+            $conf.Projects.Values | % { $_.Path } | Restore-Project
+        }
     }
 
     End{        
@@ -223,24 +222,7 @@ Function New-Lib.Release.Arkiv
 
 	##*********** Generate lib release package(s) ***********##
     try
-	{	
-		#git clean pre-conditions: git status is ready for deployment
-		#verify all changes are committed before proceeding	
-	    if(Get-GitStatus $slnDir){
-    		Write-HostIfVerbose "Git status is clean. good to go"
-	    } else {
-    		Write-HostIfVerbose "Git status not ready to release. Are all changes committed?"  -ForegroundColor Red
-		    return -1
-	    }
-
-        #clean repo for release - this will mess things up if everything is not committed!		
-        #https://git-scm.com/docs/git-clean
-        Write-Host "Cleaning repo for $buildConfiguration build"
-        Reset-GitDir $slnDir | Write-Host -ForegroundColor DarkGray
-  
-        #restore projects
-		$projectFiles | % { Restore-Project $_ }
-		
+	{
 		#patch project version
         $projects| %{ Update-ProjectVersion $_."project.file" $_."project.semVer10" $_."project.semVer20"}
 				
@@ -325,14 +307,14 @@ Function New-Lib.Release.Arkiv
 
 Function Restore-Project
 {
-Param (
-        [Parameter(Mandatory=$true)]
-        [String]$ProjectPath
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [String[]]$Path
     )
 
 	Process{
-	    Write-Host "Restoring $ProjectPath"
-	    dotnet restore $ProjectPath | Write-Host -ForegroundColor DarkGray
+	    $Path | % { dotnet restore $_ | Write-HostIfVerbose }
+        #TODO: Write to error if error
 	}
 }
 
@@ -421,13 +403,11 @@ Function Undo-ProjectVersion
 	Param (
     )
 
-    Write-host "Reverting project version"
-    foreach ($o in $input)
-    {
-        $TmpFile = $o + ".tmp"
-        Write-host "Reverting $TmpFile" -ForegroundColor DarkGray
+    Write-HostIfVerbose "Reverting project version" -ForegroundColor Gray
+    $input | % { $TmpFile = $_ + ".tmp"
+        Write-HostIfVerbose "Reverting $TmpFile to $_"
         if(Test-Path($TmpFile)){            
-            Move-Item $TmpFile $o -Force
+            Move-Item $TmpFile $_ -Force
         }        
     }
 }
@@ -515,3 +495,5 @@ Function Test-Verbose {
     param()
     [System.Management.Automation.ActionPreference]::SilentlyContinue -ne $VerbosePreference
 }
+
+
