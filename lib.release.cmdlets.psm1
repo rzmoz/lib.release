@@ -3,9 +3,9 @@ Function Get-Lib.Release.Configuration
 	[CmdletBinding()]
     Param (
         [Parameter(Mandatory=$true)]
-        [string]$solutionName,
-        [string]$testFilter = "*.tests.csproj",
+        [string]$solutionName,        
         [string]$buildConfiguration = "release",
+        [string]$testsSuffix = ".tests",
         [string]$projectsRootdir = "c:\projects"
     )
 	PROCESS {
@@ -16,113 +16,93 @@ Function Get-Lib.Release.Configuration
         $conf.CurrentDir = (Get-Item -Path ".\" -Verbose).FullName
         
         #----- sln -----#
-        [hashtable]$sln = @{}
+        [hashtable]$conf.Solution = @{}
 
-        $sln.Name = $solutionName.Trim('.','\')
-        $sln.Dir = [System.IO.Path]::Combine($projectsRootdir,$sln.Name).TrimEnd('\')
-        $sln.Path = "$($sln.Dir)\$($sln.Name).sln"
+        $conf.Solution.Name = $solutionName.Trim('.','\')
+        $conf.Solution.Dir = [System.IO.Path]::Combine($projectsRootdir,$conf.Solution.Name).TrimEnd('\')
+        $conf.Solution.Path = "$($conf.Solution.Dir)\$($conf.Solution.Name).sln"        
         
-        $conf.Solution = $sln
-
-        #----- release -----#
-        [hashtable]$release = @{}
-        $release.ParamsPath = "$($conf.Solution.Dir)\lib.release.json"
-        $release.OutputDir = "$($conf.Solution.Dir)\Lib.Release.Output"
-                
-        $conf.Release= $release;
-
         #----- msbuild -----#
-        [hashtable]$build = @{}
-        $build.Configuration = $buildConfiguration
-        
-        $conf.Build = $build;
+        [hashtable]$conf.Build = @{}
+        $conf.Build.Configuration = $buildConfiguration        
 
         #----- test -----#
-        [hashtable]$test = @{}
-        $test.Filter = $testFilter
-        $test.Disabled = $false
-        
-        $conf.Test = $test;
+        [hashtable]$conf.Test = @{}
+        $conf.Test.ProjectsFilter = $testProjectsFilter
+        $conf.Test.Disabled = $false        
 
         #----- nuget -----#
-        [hashtable]$nuget = @{}
-        $nuget.Disabled = $false
-        
-        $conf.Nuget= $nuget;
+        [hashtable]$conf.Nuget = @{}
+        $conf.Nuget.OutputDir = "$($conf.Solution.Dir)\Lib.Release.Output"
+        $conf.Nuget.Disabled = $false        
 
-        #----- Expand -----#
-        $conf = $conf | Expand-Lib.Release.Configuration
-
-        if($conf -eq $null){
+        ####----- Expanding Configurations -----####
+        if(Test-Path $conf.Solution.Dir){        
+            sl $conf.Solution.Dir  #moving location             
+        } else {
+            Write-Error "$($conf.Solution.Dir) not found. Aborting..."
             return
         }
         
-        $conf | Write-Lib.Release.Configuration
+        #----- release -----#
+        [hashtable]$conf.Release = @{}                
+        $conf.Release.Params = Get-Content -Raw -Path "$($conf.Solution.Dir)\lib.release.json"  | ConvertFrom-Json
+        
+        #----- git -----#
+        [hashtable]$conf.Git = @{}
+        $conf.Git.Branch = git rev-parse --abbrev-ref HEAD
+        $conf.Git.Hash = git rev-parse --verify HEAD
+        $conf.Git.ShortHash = git log --pretty=format:'%h' -n 1
+        $conf.Git.Commits = git rev-list --all --count $conf.Git.Branch
+        
+        #----- projects -----#
+        
+        [hashtable]$conf.Projects = @{}        
+        foreach($releaseParams in $conf.Release.Params) {
+            $pInfo = New-ProjectInfo $conf $releaseParams
+            $conf.Projects.Add($pInfo.Name,$pInfo)
+        }
+
+        #$conf.ProjectFiles = $conf.Projects | % { $_."project.file" }
+        
+        Write-Lib.Release.Configuration $conf
 
         return $conf
     }
 }
 
-Function Expand-Lib.Release.Configuration
+Function New-ProjectInfo
 {
-    [CmdletBinding()]
+	[CmdletBinding()]
     Param (
         [Parameter(Position=0, 
-        Mandatory=$true, 
-        ValueFromPipeline=$true,
-        ValueFromPipelineByPropertyName=$true)]
-        [HashTable]$conf
-        
+        Mandatory=$true )]
+        [HashTable]$conf,
+        [Parameter(Position=1, 
+        Mandatory=$true )]
+        [PSCustomObject]$releaseParams       
     )
-    PROCESS {
 
-        if(Test-Path $conf.Solution.Dir){        
-            sl $conf.Solution.Dir  #moving location 
+	PROCESS {
+
+        [hashtable]$pInfo = @{}
+        $pInfo.Name = "$($releaseParams.name)"
+        $pInfo.TestName = "$($pInfo.Name).tests"
+        $pInfo.Dir = "$($conf.Solution.Dir)\$($pInfo.Name)"
+        $pInfo.Path = "$($pInfo.Dir)\$($pInfo.Name).csproj"
+        $pInfo.Major = $releaseParams.major
+        $pInfo.Minor = $releaseParams.minor
+        $pInfo.Version = "$($pInfo.Major).$($pInfo.Minor).$($conf.Commits)"
+        $pInfo.SemVer10 = $pInfo.Version    
             
-        } else {
-            Write-Error "$($conf.Solution.Dir) not found. Aborting..."
-            return $null
-        }
+	    if(-NOT ([string]::IsNullOrEmpty($releaseParams.prerelease))){
+		    $releaseParams.prerelease= "-$($releaseParams.prerelease)"
+	    }
+    
+        $pInfo.SemVer20 = "$($pInfo.semver10)$($releaseParams.prerelease)+$($conf.Git.ShortHash)"
 
-        #----- git -----#
-        [hashtable]$git = @{}
-        $git.Branch = git rev-parse --abbrev-ref HEAD
-        $git.Hash = git rev-parse --verify HEAD
-        $git.ShortHash = git log --pretty=format:'%h' -n 1
-        $git.Commits = git rev-list --all --count $git.Branch
-
-        $conf.Git = $git;
-
-        #----- release -----#
-        $conf.Release.Params = Get-Content -Raw -Path $conf.Release.ParamsPath | ConvertFrom-Json
-
-        return $conf        
-    }
-}
-
-
-Function Write-Lib.Release.Configuration
-{
-    [CmdletBinding()]
-    Param (
-        [Parameter(Position=0, 
-        Mandatory=$true, 
-        ValueFromPipeline=$true,
-        ValueFromPipelineByPropertyName=$true)]
-        [HashTable]$configuration
-        
-    )
-    PROCESS {
-        foreach ($conf in $configuration.GetEnumerator()) {
-            if($conf.Value.GetType().fullname -eq "System.Collections.HashTable"){
-                foreach ($param in $conf.Value.GetEnumerator()) {
-                    Write-Verbose "$($conf.Key).$($param.Key) : $($param.Value)"
-                }
-            } else{
-                Write-Verbose "$($conf.Key) : $($conf.Value)"    
-            }            
-        }
-    }
+        return $pInfo
+	}
 }
 
 Function New-Lib.Release
@@ -139,74 +119,11 @@ Function New-Lib.Release
 	PROCESS {
 
     ##*********** Init ***********##
-
-	#trim solution name
-	$solutionName = $solutionName.Trim('.','\')
-
-    $currentDir =  (Get-Item -Path ".\" -Verbose).FullName
-    Write-Host "dir.current: $currentDir" -ForegroundColor Cyan
-
-	Write-Host "##*********** sln ***********##" -ForegroundColor Cyan
-
-    $slnDir = Get-ProjectDir $solutionName
-    Write-Host "sln.dir: $slnDir" -ForegroundColor Cyan
-        
-    $slnPath = "$slnDir\$solutionName.sln"
-    Write-Host "sln.path: $slnPath" -ForegroundColor Cyan
-
-    $releaseParams = (Get-Content -Raw -Path $slnDir\lib.release.json | ConvertFrom-Json).projects
-    Write-Host "sln.release.params:"$releaseParams -ForegroundColor Cyan    
-
-    $buildScriptDir = Get-ProjectDir "lib.release"
-    Write-Host "lib.release.dir: $buildScriptDir" -ForegroundColor Cyan       
-    Write-Host "build.configuration: $buildConfiguration" -ForegroundColor Cyan
-    Write-Host "nugets.disabled: $nonugets" -ForegroundColor Cyan
-    $outputDir = "$slnDir\Output"
-    Write-Host "nugets.output.dir: $outputDir" -ForegroundColor Cyan    
-
-    Write-Host "##*********** tests ***********##" -ForegroundColor Cyan
-
-    Write-Host "tests.disabled: $notests" -ForegroundColor Cyan
-    Write-Host "tests.filter: $testProjectFilter" -ForegroundColor Cyan    
-        
-    if(Test-Path $slnDir ){        
-        sl $slnDir  #moving location 
-        Write-Host "location: $slnDir " -ForegroundColor Cyan
-    } else {
-        Write-Host "$slnDir not found. Aborting.." -ForegroundColor Red
-        return
-    }
-
-    Write-Host "##*********** git ***********##" -ForegroundColor Cyan
-
-    $branch = git rev-parse --abbrev-ref HEAD
-    Write-Host "git.branch: $branch" -ForegroundColor Cyan
-        
-    $commitHash = git rev-parse --verify HEAD
-    Write-Host "git.hash: $commitHash" -ForegroundColor Cyan
-        
-    $shortHash = git log --pretty=format:'%h' -n 1
-    Write-Host "git.hash.short: $shortHash" -ForegroundColor Cyan
-
-    $commitsSinceInit = git rev-list --first-parent --count HEAD
-    Write-Host "git.commits: $commitsSinceInit" -ForegroundColor Cyan
-
-    Write-Host "##*********** projects ***********##" -ForegroundColor Cyan
-
-    $projects = New-Object System.Collections.ArrayList
-
-    foreach($projectParams in $releaseParams) {
-        $projectInfo = New-ProjectInfo -slnDir $slnDir -slnName $slnName -projectParams $projectParams        
-        $projects.Add($projectInfo)
-    }
-
-    Write-Host ($projects | Out-String) -ForegroundColor DarkGray	
-	$projectFiles = $projects | % { $_."project.file" }
+    $conf = Get-Lib.Release.Configuration     
 
 	##*********** Generate lib release package(s) ***********##
     try
-	{
-	
+	{	
 		#git clean pre-conditions: git status is ready for deployment
 		#verify all changes are committed before proceeding	
 	    if(Get-GitStatus $slnDir){
@@ -304,50 +221,6 @@ Function New-Lib.Release
     }	
 	}
 	
-}
-
-Function New-ProjectInfo
-{
-	[CmdletBinding()]
-    Param (
-        [string]$slnDir,
-        [string]$slnName,
-        [PSCustomObject]$projectParams
-    )
-
-	PROCESS {
-    Write-host "Processing project:"($projectParams) -ForegroundColor DarkGray
-                
-    $projectInfo = New-Object System.Collections.Hashtable
-            
-    $projectName = $solutionName+$projectParams.extension
-    $projectInfo.Add("project.name",$projectName);
-
-	$projectFile = "$slnDir\$projectName\$projectName.csproj"
-    $projectInfo.Add("project.file",$projectFile);
-
-    $projectDir = "$slnDir\$projectName"
-    $projectInfo.Add("project.dir",$projectDir);
-
-	$major = $projectParams.major
-	$minor = $projectParams.minor
-	
-    $projectVersion = "$major.$minor.$commitsSinceInit"
-    $projectInfo.Add("project.version",$projectVersion);
-            
-    $semver10 = $projectVersion
-    $projectInfo.Add("project.semVer10",$semver10);
-    
-	$prerelease  = $projectParams.prerelease
-	if(-NOT ([string]::IsNullOrEmpty($prerelease))){
-		$prerelease = "-$prerelease"
-	}
-	
-    $semver20 = "$semver10$prerelease+$shortHash"
-    $projectInfo.Add("project.semVer20",$semver20);
-	
-    return $projectInfo    
-	}
 }
 
 Function Restore-Project
@@ -504,5 +377,33 @@ Function Undo-ProjectVersion
         if(Test-Path($TmpFile)){            
             Move-Item $TmpFile $o -Force
         }        
+    }
+}
+
+
+Function Write-Lib.Release.Configuration
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$true)]        
+        [HashTable]$configuration
+    )
+    PROCESS {
+        foreach ($conf in $configuration.GetEnumerator()) {
+      
+            $confType = $conf.Value.GetType().fullname            
+            
+            if($confType -eq "System.Collections.HashTable"){
+                
+                $conf.Value.GetEnumerator() | foreach { Write-Verbose "$($conf.Key).$($_.Key) : $($_.Value)"}
+            }
+            elseif($confType -eq "System.Collections.ArrayList"){
+                
+                $conf.GetEnumerator()| foreach{ Write-Verbose "$($_)" }
+                
+            } else{
+                Write-Verbose "$($conf.Key) : $($conf.Value)"    
+            }            
+        }
     }
 }
