@@ -14,8 +14,7 @@ Function New-Lib.Release
     }
 
     Process {
-
-
+	
         $conf = Initialize-Lib.Release.Configuration $solutionName | Expand-Lib.Release.Configuration
 
         if(
@@ -32,7 +31,7 @@ Function New-Lib.Release
         $allPathsOk = $true
 
         $conf.Projects.Values | % {
-                        if (-NOT (Test-Path $_.Path )){ 
+                        if (-NOT (Test-Path $_.Path)){ 
                             Write-Host "$($_.Path) not found!" -ForegroundColor Red
                             $allPathsOk = $false
                         }
@@ -109,22 +108,17 @@ Function New-Lib.Release
                 if($testsPassed) {
                     if(-NOT ($nonugets)) {
                         #create nugets and place in output Dir dir
-                        <#
-				        foreach($project in $projects) {					
-	                        $projectFile = $project."project.file"
-					        $packageVersion = $project."project.semVer10"
-                
-					        Write-Host "Packing $projectFile -v $packageVersion"
-					        dotnet pack $projectFile --configuration $buildConfiguration --no-build --output $outputDir  | Write-Host -ForegroundColor DarkGray
-				        }
-
+                        $projects | % {
+							Write-HostIfVerbose "Packing $($_.Path) -v $($_.SemVer10)"
+					        dotnet pack $_.Path --configuration $conf.Build.Configuration --no-build --output $conf.Nuget.OutputDir | Out-String | Write-HostIfVerbose
+						}
+				        
                         $apiKey = Read-Host "Please enter nuget API key"
                         #https://docs.nuget.org/consume/command-line-reference
-                        Get-ChildItem $outputDir -Filter "*.nupkg" | % { 
-                            Write-Host $_.FullName
-                            & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
-                        }
-                        #>               
+                        Get-ChildItem $conf.Nuget.OutputDir -Filter "*.nupkg" | % { 
+                            Write-HostIfVerbose $_.FullName -ForegroundColor Gray
+                            & "$($PSScriptRoot)\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-HostIfVerbose
+                        }                        
                     }            
                 } else {
                     Write-Error "Release failed!"
@@ -147,18 +141,6 @@ Function New-Lib.Release
     End{        
     }
 }
-
-Function New-Lib.Release.Arkiv
-{
-	PROCESS {
-
-		
-		        
-        
-	}
-	
-}
-
 
 ########################################################################
 #                             Configuration                            #
