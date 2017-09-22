@@ -77,9 +77,9 @@ Function New-Lib.Release
                 
                 #nugets
                 #clean output dir if exists
-                if(Test-Path $conf.Nuget.OutputDir) { Remove-Item "$($conf.Nuget.OutputDir)\*" -Force | Write-Host -ForegroundColor DarkGray }
+                if(Test-Path $conf.Nuget.OutputDir) { Remove-Item "$($conf.Nuget.OutputDir)\*" -Force | Write-HostIfVerbose }
                 #create aritfacts dir
-                New-Item $conf.Nuget.OutputDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
+                New-Item $conf.Nuget.OutputDir -ItemType Directory -Force | Write-HostIfVerbose
 
                 
                 #tests
@@ -332,20 +332,20 @@ Function Update-ProjectVersion
 	    #ensure version nodes exist
 	    $propertyGroupNode = $xml.SelectSingleNode("//Project/PropertyGroup")
 	    if ($propertyGroupNode -eq $null) {
-    		Write-Host "csproj format not recognized. Is this a valid VS 17 project file?" |-ForegroundColor Red
+    		Write-Error "csproj format not recognized. Is this a valid VS 17 project file?" |-ForegroundColor Red
 		    return
 	    }
 		
 	    if ($propertyGroupNode.Version -eq $null) {
-    		$propertyGroupNode.AppendChild($xml.CreateElement("Version")) | Write-Host -ForegroundColor DarkGray
+    		$propertyGroupNode.AppendChild($xml.CreateElement("Version")) | Write-HostIfVerbose
     	}
 
 	    if ($propertyGroupNode.AssemblyVersion -eq $null) {
-    		$propertyGroupNode.AppendChild($xml.CreateElement("AssemblyVersion"))| Write-Host -ForegroundColor DarkGray
+    		$propertyGroupNode.AppendChild($xml.CreateElement("AssemblyVersion")) | Write-HostIfVerbose
     	}
 	
 	    if ($propertyGroupNode.FileVersion -eq $null) {
-    		$propertyGroupNode.AppendChild($xml.CreateElement("FileVersion"))| Write-Host -ForegroundColor DarkGray
+    		$propertyGroupNode.AppendChild($xml.CreateElement("FileVersion")) | Write-HostIfVerbose
     	}
 
 	    #update versions
