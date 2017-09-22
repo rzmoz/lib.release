@@ -434,28 +434,6 @@ Function Undo-ProjectVersion
 ########################################################################
 #                             PS Foundation                            #
 ########################################################################
-
-Function Enter-Dir
-{
-    [CmdletBinding()]
-    Param (                
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
-        [String]$Path,
-        [Parameter(Position=1)]
-        [String]$ExitPath = (Get-Location).Path
-    )
-    Process {
-        if( Test-Path $Path){
-            sl $Path
-            Write-HostIfVerbose "Entered: $Path From $ExitPath"
-            return $true
-        } else {
-            Write-Error "$Path not entered: Not found!"
-            return $false
-        }
-    }
-}
-
 Function Invoke-InDir
 {
     [CmdletBinding()]
