@@ -10,9 +10,12 @@ Function New-Lib.Release
     )
 
     Begin{
+        $currentDir = (Get-Location).Path
     }
 
     Process {
+
+
         $conf = Initialize-Lib.Release.Configuration $solutionName | Expand-Lib.Release.Configuration
 
         if(
@@ -38,12 +41,12 @@ Function New-Lib.Release
                             $allPathsOk = $false
                         }
                     }
-        if(-not ($allPathsOk)){
+        if(-NOT ($allPathsOk)){
             Write-Error "Project paths are corrupt! See log for details. Aborting..."
             return
         }
-        
-        Invoke-InDir $conf.Solution.Dir {
+
+        if((Enter-Dir $conf.Solution.Dir)) {
             try{
                 ######### Initialize Git Dir #########    
                 $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
@@ -62,7 +65,7 @@ Function New-Lib.Release
                 #restore projects
                 $conf.Projects.Values | % { $_.Path } | % { 
                     Write-HostIfVerbose "Restoring $($_)" -ForegroundColor Gray
-                    dotnet restore $_ | Write-HostIfVerbose 
+                    dotnet restore $_ | Out-String | Write-HostIfVerbose 
                 }
                 #TODO: Write to error if error
                 
@@ -71,7 +74,7 @@ Function New-Lib.Release
 
                 #build sln
                 Write-HostIfVerbose "Building $($conf.Solution.Path)" -ForegroundColor Gray
-                dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Write-HostIfVerbose
+                dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String | Write-HostIfVerbose
                 
                 #nugets
                 #clean output dir if exists
@@ -79,6 +82,53 @@ Function New-Lib.Release
                 #create aritfacts dir
                 New-Item $conf.Nuget.OutputDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
 
+                
+                #tests
+                $testsPassed = $true;
+        
+                if(-NOT ($notests)){            
+				    $conf.Projects.Values | % { $_.TestPath } | % {
+                        Write-HostIfVerbose "Testing $($_)" -ForegroundColor Gray
+                        
+                        $testResult = dotnet test $_ --configuration $conf.Build.Configuration --no-build | Out-String
+						
+						Write-HostIfVerbose $testResult
+
+						if(-NOT ($testResult -imatch 'Test Run Successful.')){
+							Write-Host "$($_) tests failed" -ForegroundColor Red
+							$testsPassed = $false
+						}
+                    }						
+				}
+
+                if(-NOT ($testsPassed)){                    
+                    return
+                }
+
+                #nugets
+                if($testsPassed) {
+                    if(-NOT ($nonugets)) {
+                        #create nugets and place in output Dir dir
+                        <#
+				        foreach($project in $projects) {					
+	                        $projectFile = $project."project.file"
+					        $packageVersion = $project."project.semVer10"
+                
+					        Write-Host "Packing $projectFile -v $packageVersion"
+					        dotnet pack $projectFile --configuration $buildConfiguration --no-build --output $outputDir  | Write-Host -ForegroundColor DarkGray
+				        }
+
+                        $apiKey = Read-Host "Please enter nuget API key"
+                        #https://docs.nuget.org/consume/command-line-reference
+                        Get-ChildItem $outputDir -Filter "*.nupkg" | % { 
+                            Write-Host $_.FullName
+                            & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
+                        }
+                        #>               
+                    }            
+                } else {
+                    Write-Error "Release failed!"
+                }
 
             } finally {
                 #clean output Dir if exists
@@ -87,6 +137,9 @@ Function New-Lib.Release
 
 		        #revert project version
                 $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion
+
+                #bugging out!
+                sl $currentDir
             }
         }
     }
@@ -94,6 +147,18 @@ Function New-Lib.Release
     End{        
     }
 }
+
+Function New-Lib.Release.Arkiv
+{
+	PROCESS {
+
+		
+		        
+        
+	}
+	
+}
+
 
 ########################################################################
 #                             Configuration                            #
@@ -163,12 +228,14 @@ Function Expand-Lib.Release.Configuration
         #----- git -----#
         [HashTable]$conf.Git = @{}
 
-        Invoke-InDir $conf.Solution.Dir {
+        if((Enter-Dir $conf.Solution.Dir)) {
             $conf.Git.Branch = git rev-parse --abbrev-ref HEAD
             $conf.Git.Hash = git rev-parse --verify HEAD
             $conf.Git.ShortHash = git log --pretty=format:'%h' -n 1
             $conf.Git.Commits = git rev-list --all --count $conf.Git.Branch
-        }        
+        } else {
+            return
+        }
         
         #----- projects -----#
         
@@ -252,87 +319,6 @@ Function Get-ProjectInfo
 	}
 }
 
-Function New-Lib.Release.Arkiv
-{
-	PROCESS {
-
-		$testsPassed = $true;
-        
-        if(-NOT ($notests)){            
-				
-				$testProjects = Get-ChildItem -Path "$slnDir" -Filter "$testProjectFilter" -Recurse | Select-Object 
-				
-				Write-Host "Test projects found: $testProjects" -ForegroundColor DarkGray
-
-				$testProjects | % {			
-						Write-Host "Testing $_"
-
-						$testResult = dotnet test $_.Directory.FullName --configuration $buildConfiguration --no-build
-						
-						Write-Host $testResult -ForegroundColor DarkGray
-
-						if(-NOT ($testResult -imatch 'Test Run Successful.')){
-							Write-Host "$_.Name tests failed" -ForegroundColor Red
-							$testsPassed = $false
-						} else {
-							Write-Host "$_.Name tests passed" -ForegroundColor DarkGray
-						}
-				}
-
-                if($testsPassed){
-                    Write-Host "All tests passed" -ForegroundColor Green
-                }            
-        } 
-		        
-        #create nugets if all tests passed
-        if($testsPassed) {
-            
-            if(-NOT ($nonugets)) {
-
-				#create nugets and place in output Dir dir
-				foreach($project in $projects) {					
-	                $projectFile = $project."project.file"
-					$packageVersion = $project."project.semVer10"
-                
-					Write-Host "Packing $projectFile -v $packageVersion"
-					dotnet pack $projectFile --configuration $buildConfiguration --no-build --output $outputDir  | Write-Host -ForegroundColor DarkGray
-				}
-
-                $apiKey = Read-Host "Please enter nuget API key"
-                #https://docs.nuget.org/consume/command-line-reference
-                Get-ChildItem $outputDir -Filter "*.nupkg" | % { 
-                    Write-Host $_.FullName
-                    & "$buildScriptDir\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-Host -ForegroundColor DarkGray
-                }                
-            }            
-            Write-host "Build completed!" -ForegroundColor Green
-        }
-        else {
-            Write-host "Build failed!" -ForegroundColor Red
-        }
-	}
-	
-}
-
-Function Get-ProjectDir
-{
-	[CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$true)]
-        [string]$ProjectName,
-        [string]$ProjectsRootDir = "c:\projects"
-    )
-	Process {
-        $projectDir = [System.IO.Path]::Combine($ProjectsRootDir,$ProjectName).TrimEnd('\')
-        if(-NOT (Test-Path($projectDir))) {
-            throw "Project dir not found: $projectDir"
-        }
-        else {
-            return $projectDir
-        }
-	}
-}
-
 ########################################################################
 #                            Project Version                           #
 ########################################################################
@@ -412,39 +398,23 @@ Function Undo-ProjectVersion
 ########################################################################
 #                             PS Foundation                            #
 ########################################################################
-Function Invoke-InDir
+Function Enter-Dir
 {
     [CmdletBinding()]
     Param (                
         [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
-        [String]$Path,
-        [Parameter(Position=1, Mandatory=$true)]
-        [Scriptblock]$Script,
-        [Parameter(Position=2)]
-        [String]$ExitPath = (Get-Location).Path
+        [String]$Path
     )
     PROCESS {
-
-        $pathEntered = $false
-
-        try{
-            if( Test-Path $Path){
-                sl $Path
-                $pathEntered = $true
-                Write-HostIfVerbose "Entered: $($Path) From $ExitPath"               
-
-                $Script.InvokeReturnAsIs()
-            }
-            else {
-                Write-HostIfVerbose "Not Entered: $($Path)"
-                return 
-            }
-        } finally {
-            if($pathEntered){
-                sl $ExitPath
-                Write-HostIfVerbose "Exited: $($Path) To $ExitPath"
-            }            
-        }        
+        
+        if( Test-Path $Path){
+            sl $Path
+            Write-HostIfVerbose "Entered: $($Path) From $ExitPath"               
+            return $true
+        } else {
+            Write-Error "Failed to enter: $($Path)"
+            return $false
+        }
     }
 }
 
