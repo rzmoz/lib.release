@@ -23,6 +23,25 @@ Function New-Lib.Release
         }
         
         Write-Lib.Release.Configuration $conf
+
+        #assert project paths
+        Write-HostIfVerbose "Asserting project paths" -ForegroundColor Gray
+        $allPathsOk = $true
+
+        $conf.Projects.Values | % {
+                        if (-NOT (Test-Path $_.Path )){ 
+                            Write-Host "$($_.Path) not found!" -ForegroundColor Red
+                            $allPathsOk = $false
+                        }
+                        if (-NOT (Test-Path $_.TestPath )){ 
+                            Write-Host "$($_.TestPath) not found!" -ForegroundColor Red
+                            $allPathsOk = $false
+                        }
+                    }
+        if(-not ($allPathsOk)){
+            Write-Error "Project paths are corrupt! See log for details. Aborting..."
+            return
+        }
         
         Invoke-InDir $conf.Solution.Dir {
             try{
@@ -33,7 +52,6 @@ Function New-Lib.Release
                     Write-HostIfVerbose "Cleaning $((Get-Location).Path)" -ForegroundColor Gray 
     		        #clean
                     git clean -d -x -f | Out-String | Write-HostIfVerbose
-                    Write-HostIfVerbose "$((Get-Location).Path) cleaned" -ForegroundColor Gray 
                 
     		    } else {
                     Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
@@ -42,19 +60,33 @@ Function New-Lib.Release
                 }
 
                 #restore projects
-                $conf.Projects.Values | % { $_.Path } | Restore-Project
-
-
+                $conf.Projects.Values | % { $_.Path } | % { 
+                    Write-HostIfVerbose "Restoring $($_)" -ForegroundColor Gray
+                    dotnet restore $_ | Write-HostIfVerbose 
+                }
+                #TODO: Write to error if error
+                
                 #patch project version
                 $conf.Projects.Values | % { Update-ProjectVersion $_.Path $_.SemVer10 $_.SemVer20 }
-            
+
+                #build sln
+                Write-HostIfVerbose "Building $($conf.Solution.Path)" -ForegroundColor Gray
+                dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Write-HostIfVerbose
+                
+                #nugets
+                #clean output dir if exists
+                if(Test-Path $conf.Nuget.OutputDir) { Remove-Item "$($conf.Nuget.OutputDir)\*" -Force | Write-Host -ForegroundColor DarkGray }
+                #create aritfacts dir
+                New-Item $conf.Nuget.OutputDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
+
+
             } finally {
                 #clean output Dir if exists
                 if(Test-Path $conf.Nuget.OutputDir) { Remove-Item "$($conf.Nuget.OutputDir)\*" -Force | Write-Host -ForegroundColor DarkGray }
 		        if(Test-Path $conf.Nuget.OutputDir) { Remove-Item "$($conf.Nuget.OutputDir)" -Force | Write-Host -ForegroundColor DarkGray }
 
 		        #revert project version
-                $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion            
+                $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion
             }
         }
     }
@@ -199,12 +231,12 @@ Function Get-ProjectInfo
     )
 
 	PROCESS {
-
         [HashTable]$pInfo = @{}
         $pInfo.Name = "$($releaseParams.name)"
         $pInfo.TestName = "$($pInfo.Name).tests"
         $pInfo.Dir = "$($conf.Solution.Dir)\$($pInfo.Name)"
         $pInfo.Path = "$($pInfo.Dir)\$($pInfo.Name).csproj"
+        $pInfo.TestPath = "$($conf.Solution.Dir)\$($pInfo.TestName)\$($pInfo.TestName).csproj"
         $pInfo.Major = $releaseParams.major
         $pInfo.Minor = $releaseParams.minor
         $pInfo.Version = "$($pInfo.Major).$($pInfo.Minor).$($conf.Git.Commits)"
@@ -222,31 +254,8 @@ Function Get-ProjectInfo
 
 Function New-Lib.Release.Arkiv
 {
-	[CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$true)]
-        [String]$solutionName,
-        [Switch]$nonugets = $false,        
-        [Switch]$notests = $false,
-        [String]$testProjectFilter = "*.tests.csproj",
-        [String]$buildConfiguration = "release"
-    )
 	PROCESS {
 
-	##*********** Generate lib release package(s) ***********##
-    try
-	{
-		
-				
-        #build sln
-        Write-Host "Building $slnPath"
-        dotnet build $slnPath --configuration $buildConfiguration --no-incremental --verbosity minimal | Write-Host -ForegroundColor DarkGray
-        		
-        #clean output dir if exists
-        if(Test-Path $outputDir) { Remove-Item "$outputDir\*" -Force | Write-Host -ForegroundColor DarkGray }
-        #create aritfacts dir
-        New-Item $outputDir -ItemType Directory -Force | Write-Host -ForegroundColor DarkGray
-        
 		$testsPassed = $true;
         
         if(-NOT ($notests)){            
@@ -301,33 +310,8 @@ Function New-Lib.Release.Arkiv
         else {
             Write-host "Build failed!" -ForegroundColor Red
         }
-		
-    } finally {        
-        #clean output Dir if exists
-        if(Test-Path $outputDir) { Remove-Item "$outputDir\*" -Force | Write-Host -ForegroundColor DarkGray }
-		if(Test-Path $outputDir) { Remove-Item "$outputDir" -Force | Write-Host -ForegroundColor DarkGray }
-
-		#revert project version
-        $projectFiles | Undo-ProjectVersion
-		
-        Write-Host "Setting location $currentDir" | Write-Host -ForegroundColor DarkGray
-        sl $currentDir        
-    }	
 	}
 	
-}
-
-Function Restore-Project
-{
-    Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
-        [String[]]$Path
-    )
-
-	Process{
-	    $Path | % { dotnet restore $_ | Write-HostIfVerbose }
-        #TODO: Write to error if error
-	}
 }
 
 Function Get-ProjectDir
