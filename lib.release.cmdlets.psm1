@@ -12,11 +12,15 @@ Function New-Lib.Release
     )
 
     Begin{
-        $currentDir = (Get-Location).Path        
+        $currentDir = (Get-Location).Path
+
         Write-HostIfVerbose "Initializing $($SolutionName) for release" -ForegroundColor Cyan        
+        
     }
 
     Process {
+
+        Write-Progress -Activity "Initializing $($SolutionName) for release" -Status "Initializing configuration"
         
         $conf = Initialize-Lib.Release.Configuration $SolutionName -buildConfiguration $BuildConfiguration -testsProjectSuffix $TestsProjectSuffix -ScanRootDir $ScanRootDir -NoTests:$NoTests -NoNugets:$NoNugets
         
@@ -36,6 +40,8 @@ Function New-Lib.Release
         if((Enter-Dir $conf.Solution.Dir)) {
             try{                
                 ######### Initialize Git Dir #########    
+                Write-Progress -Activity "Initializing $($SolutionName) for release" -Status "Initializing git dir"
+                
                 Write-HostIfVerbose "Cleaning $((Get-Location).Path)" -ForegroundColor Cyan
                 $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
                 $gitStatus = git status | Out-String
@@ -47,30 +53,34 @@ Function New-Lib.Release
                     Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
                     Write-Host "$($gitStatus)" -ForegroundColor Red -BackgroundColor Black
                     return
-                }                
+                }     
                 
+                #patch project version
+                Write-Progress -Activity "dotnet" -Status "Patching versions"
+                Write-HostIfVerbose "Patching project versions" -ForegroundColor Cyan
+                $conf.Projects.Values | % { Update-ProjectVersion $_.Path $_.SemVer10 $_.SemVer20 }
+
                 #restore projects
+                Write-Progress -Activity "dotnet" -Status "Restoring"
                 Write-HostIfVerbose "Restoring Nugets" -ForegroundColor Cyan
                 $conf.Projects.Values | % { $_.Path } | % { 
                     Write-HostIfVerbose "Restoring $($_)" -ForegroundColor Gray
                     $restore = dotnet restore $_ | Out-String | Write-HostIfVerbose
                     #TODO: Write in red if error
                 }
-                
-                #patch project version
-                Write-HostIfVerbose "Patching project versions" -ForegroundColor Cyan
-                $conf.Projects.Values | % { Update-ProjectVersion $_.Path $_.SemVer10 $_.SemVer20 }
                                 
-                #build sln                
+                #build sln
+                Write-Progress -Activity "dotnet" -Status "Building"
                 Write-HostIfVerbose "Building $($conf.Solution.Path)" -ForegroundColor Cyan
                 dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String | Write-HostIfVerbose
                 #TODO: Write in red if error
                 
                 #tests
-                Write-HostIfVerbose "Testing release" -ForegroundColor Cyan
                 if($conf.Tests.Disabled) {
                     Write-HostIfVerbose "Skipping tests. -NoTests flag set" -ForegroundColor Yellow
-                } else {                    
+                } else {
+                    Write-Progress -Activity "dotnet" -Status "Testing"
+                    Write-HostIfVerbose "Testing release" -ForegroundColor Cyan
                     if(-NOT($conf.Projects | Test-Projects -BuildConfiguration $conf.Build.Configuration)){
                         return
                     }
@@ -78,20 +88,23 @@ Function New-Lib.Release
                 
                 #nugets
                 #clean output dir if exists
-
+                Write-Progress -Activity "Nugets" -Status "Cleaning output dir"
                 Write-HostIfVerbose "Cleaning OutPut dir: $($conf.Nugets.OutputDir)" -ForegroundColor Cyan
                 if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)\*" -Force | Out-String | Write-HostIfVerbose }
+                
                 #create aritfacts dir
                 New-Item $conf.Nugets.OutputDir -ItemType Directory -Force | Out-String | Write-HostIfVerbose
 
                 if($conf.Nugets.Disabled){
                     Write-HostIfVerbose "Skipping nugets. -NoNugets flag set" -ForegroundColor Yellow -BackgroundColor Black                    
                 } else {
+                    Write-Progress -Activity "Nugets" -Status "Packaging"
                     Write-HostIfVerbose "Packaging Nugets" -ForegroundColor Cyan
                     $conf.Projects | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -Buildconfiguration $conf.Build.Configuration | Out-Null #nuget.exe writes its own error messages
                 }
 
             } finally {
+                Write-Progress -Activity "Post build" -Status "Cleaning up garbage"
                 Write-HostIfVerbose "Cleaning up..." -ForegroundColor Cyan
 
                 #clean output Dir if exists
@@ -100,6 +113,8 @@ Function New-Lib.Release
 
 		        #revert project version
                 $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion                
+                
+                Write-Progress -Activity "Post build" -Completed
             }            
         }
         
@@ -402,6 +417,8 @@ Function Publish-Nugets
                 				        
         $apiKey = Read-Host "Please enter nuget API key"
         
+        Write-Progress -Activity "Nugets" -Status "Publishing"
+
         #https://docs.nuget.org/consume/command-line-reference
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
             Write-HostIfVerbose $_.FullName -ForegroundColor Gray
