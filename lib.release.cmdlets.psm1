@@ -3,8 +3,8 @@ Function New-Lib.Release
     [CmdletBinding()]
     Param (
         [string]$solutionName = "netcore.basics",
-        [switch]$nonugets = $false,
-        [switch]$notests = $false,
+        [switch]$noNugets = $false,
+        [switch]$noTests = $false,
         [string]$testProjectFilter = "*.tests.csproj",
         [string]$buildConfiguration = "release"
     )
@@ -14,17 +14,14 @@ Function New-Lib.Release
     }
 
     Process {
-	
-        $conf = Initialize-Lib.Release.Configuration $solutionName | Expand-Lib.Release.Configuration
+	        
+        $conf = Initialize-Lib.Release.Configuration $solutionName | Write-Lib.Release.Configuration
 
-        if(
-            ((Test-PathVerbose $conf.Solution.Dir) -eq $false)
-        ){
+        if(-NOT(Test-Path $conf.Solution.Dir)){
+            Write-Error "$($path) not found! Aborting..."
             Write-Host "Aborting...!" -ForegroundColor Red -BackgroundColor Black
             return;
-        }
-        
-        Write-Lib.Release.Configuration $conf
+        }        
 
         #assert project paths
         Write-HostIfVerbose "Asserting project paths" -ForegroundColor Gray
@@ -57,7 +54,7 @@ Function New-Lib.Release
                 
     		    } else {
                     Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
-                    Write-Host "$($gitStatus)" -ForegroundColor White
+                    Write-Host "$($gitStatus)" -ForegroundColor Red -BackgroundColor Black
                     return
                 }
 
@@ -83,34 +80,17 @@ Function New-Lib.Release
 
                 
                 #tests
-                $testsPassed = $true;
-        
-                if(-NOT ($notests)){            
-				    $conf.Projects.Values | % { $_.TestPath } | % {
-                        Write-HostIfVerbose "Testing $($_)" -ForegroundColor Gray
-                        
-                        $testResult = dotnet test $_ --configuration $conf.Build.Configuration --no-build | Out-String
-						
-						Write-HostIfVerbose $testResult
-
-						if(-NOT ($testResult -imatch 'Test Run Successful.')){
-							Write-Host "$($_) tests failed" -ForegroundColor Red
-							$testsPassed = $false
-						}
-                    }						
-				}
-
-                if(-NOT ($testsPassed)){                    
+                if(-NOT($conf.Projects | Test-Projects -NoTests:$noTests)){
+                    Write-Error "$($_) tests failed"
                     return
                 }
-
+                
                 #nugets
-                if($testsPassed) {
-                    if(-NOT ($nonugets)) {
-                        #create nugets and place in output Dir dir
-                        $projects | % {
-							Write-HostIfVerbose "Packing $($_.Path) -v $($_.SemVer10)"
-					        dotnet pack $_.Path --configuration $conf.Build.Configuration --no-build --output $conf.Nuget.OutputDir | Out-String | Write-HostIfVerbose
+                if(-NOT ($nonugets)) {
+                    #create nugets and place in output Dir dir
+                    $projects | % {
+					    Write-HostIfVerbose "Packing $($_.Path) -v $($_.SemVer10)"
+					    dotnet pack $_.Path --configuration $conf.Build.Configuration --no-build --output $conf.Nuget.OutputDir | Out-String | Write-HostIfVerbose
 						}
 				        
                         $apiKey = Read-Host "Please enter nuget API key"
@@ -119,10 +99,8 @@ Function New-Lib.Release
                             Write-HostIfVerbose $_.FullName -ForegroundColor Gray
                             & "$($PSScriptRoot)\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Write-HostIfVerbose
                         }                        
-                    }            
-                } else {
-                    Write-Error "Release failed!"
-                }
+                    }
+                
 
             } finally {
                 #clean output Dir if exists
@@ -139,6 +117,43 @@ Function New-Lib.Release
     }
 
     End{        
+    }
+}
+
+########################################################################
+#                                 Tests                                #
+########################################################################
+Function Test-Projects
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [HashTable]$projects,
+        [Switch]$NoTests = $false
+    )
+    Process {
+        
+        if($NoTests){
+            Write-HostIfVerbose "Skipping tests. NoTests flag set" -ForegroundColor Yellow
+            return $true
+        }
+
+        $testsPassed = $true
+
+        $projects.Values | % { $_.TestPath } | % {
+                        
+                        Write-HostIfVerbose "Testing $($_)" -ForegroundColor Gray
+                        
+                        $testResult = dotnet test $_ --configuration $conf.Build.Configuration --no-build | Out-String
+						
+						Write-HostIfVerbose $testResult
+
+						if(-NOT ($testResult -imatch 'Test Run Successful.')){							
+							$testsPassed = $false
+						}
+                    }
+
+        return $testsPassed
     }
 }
 
@@ -181,23 +196,6 @@ Function Initialize-Lib.Release.Configuration
         $conf.Nuget.OutputDir = "$($conf.Solution.Dir)\Lib.Release.Output"
         $conf.Nuget.Disabled = $false
 
-        return $conf
-    }
-}
-
-Function Expand-Lib.Release.Configuration
-{
-    [CmdletBinding()]
-    Param (
-        [Parameter(Position=0, 
-        Mandatory=$true, 
-        ValueFromPipeline=$true,
-        ValueFromPipelineByPropertyName=$true)]
-        [Alias('Configuration')]
-        [HashTable]$conf
-    )
-    PROCESS {        
-
         #----- msbuild -----#
         [HashTable]$conf.System = @{}
         $conf.System.CurrentDir = (Get-Location).Path
@@ -228,42 +226,6 @@ Function Expand-Lib.Release.Configuration
         }
 
         return $conf
-    }
-}
-
-Function Write-Lib.Release.Configuration
-{
-    [CmdletBinding()]
-    Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
-        [HashTable]$configuration,
-        [Parameter(Position=1)]
-        [Int]$level = 0
-    )
-    Process {
-        if ((Test-Verbose) -ne $true){
-            return
-        }
-
-        $level++
-
-        $spacer = ""
-        for($i=0; $i -lt $level; $i++){
-            $spacer += "  "
-        }
-
-        foreach ($conf in $configuration.GetEnumerator()) {
-      
-            $confType = $conf.Value.GetType().fullname            
-            
-            if($confType -eq "System.Collections.HashTable"){
-                Write-Host "$($spacer)[$($conf.Key)]" -ForegroundColor Gray
-                Write-Lib.Release.Configuration $conf.Value $level
-            }
-            else {
-                Write-Host "$($spacer)$($conf.Key) : $($conf.Value)" -ForegroundColor DarkGray
-            }            
-        }
     }
 }
 
@@ -301,10 +263,47 @@ Function Get-ProjectInfo
 	}
 }
 
+Function Write-Lib.Release.Configuration
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [HashTable]$configuration,
+        [Parameter(Position=1)]
+        [Int]$level = 0
+    )
+    Process {
+        if ((Test-Verbose) -ne $true){
+            return
+        }
+
+        $level++
+
+        $spacer = ""
+        for($i=0; $i -lt $level; $i++){
+            $spacer += "  "
+        }
+
+        foreach ($conf in $configuration.GetEnumerator()) {
+      
+            $confType = $conf.Value.GetType().fullname            
+            
+            if($confType -eq "System.Collections.HashTable"){
+                Write-Host "$($spacer)[$($conf.Key)]" -ForegroundColor Gray
+                Write-Lib.Release.Configuration $conf.Value $level
+            }
+            else {
+                Write-Host "$($spacer)$($conf.Key) : $($conf.Value)" -ForegroundColor DarkGray
+            }            
+        }
+
+        return $configuration
+    }
+}
+
 ########################################################################
 #                            Project Version                           #
 ########################################################################
-
 
 Function Update-ProjectVersion
 {
@@ -390,8 +389,8 @@ Function Enter-Dir
     PROCESS {
         
         if( Test-Path $Path){
-            sl $Path
-            Write-HostIfVerbose "Entered: $($Path) From $ExitPath"               
+            Write-HostIfVerbose "Entered: $($Path) From $((Get-Location).Path)"
+            sl $Path            
             return $true
         } else {
             Write-Error "Failed to enter: $($Path)"
@@ -399,7 +398,6 @@ Function Enter-Dir
         }
     }
 }
-
 
 Function Write-HostIfVerbose
 {
@@ -418,24 +416,6 @@ Function Write-HostIfVerbose
                 Write-Host $message -ForegroundColor $ForegroundColor
              
             }
-        }
-    }
-}
-
-Function Test-PathVerbose
-{
-    [CmdletBinding()]
-    Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
-        [String]$path
-    )
-    PROCESS {
-
-        if(Test-Path $path){
-            return $true
-        } else {
-            Write-Error "$($path) not found!"
-            return $false
         }
     }
 }
