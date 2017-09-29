@@ -5,8 +5,7 @@ Function New-Lib.Release
         [Parameter(Position=0, Mandatory=$true)]
         [string]$SolutionName,
         [switch]$NoNugets = $false,
-        [switch]$NoTests = $false,
-        [string]$TestsProjectSuffix = ".tests",
+        [switch]$NoTests = $false,        
         [string]$BuildConfiguration = "release",
         [string]$ScanRootDir = "c:\projects"
     )
@@ -14,15 +13,14 @@ Function New-Lib.Release
     Begin{
         $currentDir = (Get-Location).Path
 
-        Write-HostIfVerbose "Initializing $($SolutionName) for release" -ForegroundColor Cyan        
-        
+        Write-HostIfVerbose "Initializing $($SolutionName) for release" -ForegroundColor Cyan                
     }
 
     Process {
 
         Write-Progress -Activity "Initializing $($SolutionName) for release" -Status "Initializing configuration"
         
-        $conf = Initialize-Lib.Release.Configuration $SolutionName -buildConfiguration $BuildConfiguration -testsProjectSuffix $TestsProjectSuffix -ScanRootDir $ScanRootDir -NoTests:$NoTests -NoNugets:$NoNugets
+        $conf = Initialize-Lib.Release.Configuration $SolutionName -buildConfiguration $BuildConfiguration -ScanRootDir $ScanRootDir -NoTests:$NoTests -NoNugets:$NoNugets
         
         $conf | Write-Lib.Release.Configuration
 
@@ -31,8 +29,14 @@ Function New-Lib.Release
             return
         }
         
-        #assert project paths        
-        if(-NOT($conf.Projects.Values | % { (Test-PathVerbose $_.Path) -and (Test-PathVerbose $_.TestPath) } )){
+        #assert project paths
+        $allPathsOk = $true        
+        $conf.Projects.Values | % { 
+            $allPathsOk= $allPathsOk -and (Test-PathVerbose $_.Path)
+            if($_.TestPath -ne "skip"){ $allPathsOk= $allPathsOk-and (Test-PathVerbose $_.TestPath) }            
+        }
+        
+        if(-NOT $allPathsOk){
             Write-Error "Aborting..."
             return
         }        
@@ -139,8 +143,6 @@ Function Initialize-Lib.Release.Configuration
         [Parameter(Mandatory=$true)]  
         [string]$BuildConfiguration,
         [Parameter(Mandatory=$true)]
-        [string]$TestsProjectSuffix,
-        [Parameter(Mandatory=$true)]
         [string]$ScanRootDir,        
         [Parameter(Mandatory=$true)]
         [switch]$NoTests = $false,
@@ -168,7 +170,6 @@ Function Initialize-Lib.Release.Configuration
 
         #----- test -----#
         [HashTable]$conf.Tests = @{}
-        $conf.Tests.ProjectSuffix = $TestsProjectSuffix
         $conf.Tests.Disabled = $NoTests    
 
         #----- nuget -----#
@@ -223,8 +224,14 @@ Function Get-ProjectInfo
         $pInfo.Name = "$($releaseParams.name)"
         $pInfo.Dir = "$($conf.Solution.Dir)\$($pInfo.Name)"
         $pInfo.Path = "$($pInfo.Dir)\$($pInfo.Name).csproj"
-        $pInfo.TestName = "$($pInfo.Name)$($conf.Tests.ProjectSuffix)"        
-        $pInfo.TestPath = "$($conf.Solution.Dir)\$($pInfo.TestName)\$($pInfo.TestName).csproj"
+
+        if($($releaseParams.tests).ToLower() -eq "skip"){
+            $pInfo.TestPath = "skip"
+        } else {
+            $pInfo.TestPath = "$($conf.Solution.Dir)\$($releaseParams.tests)\$($releaseParams.tests).csproj"                
+        }
+
+        
         $pInfo.Major = $releaseParams.major
         $pInfo.Minor = $releaseParams.minor
         $pInfo.Version = "$($pInfo.Major).$($pInfo.Minor).$($conf.Git.Commits)"
@@ -367,15 +374,20 @@ Function Test-Projects
     }
 
     Process {
-        $Projects.Values | % {         
-            Write-HostIfVerbose "Testing $($_.TestPath)" -ForegroundColor Gray
-            $testResult = dotnet test $_.TestPath --configuration $Buildconfiguration --no-build | Out-String
-						
-			$testResult | Write-HostIfVerbose 
+        $Projects.Values | % {
 
-			if(-NOT ($testResult -imatch 'Test Run Successful.')){							
-			    $testsPassed = $false
-			}        
+            if($_.TestPath.ToLower() -eq "skip"){
+               Write-HostIfVerbose "Skipping tests for $($_.Name) - skip tests flag set"            
+            } else {
+                Write-HostIfVerbose "Testing $($_.TestPath)" -ForegroundColor Gray
+                $testResult = dotnet test $_.TestPath --configuration $Buildconfiguration --no-build | Out-String
+						
+			    $testResult | Write-HostIfVerbose 
+
+			    if(-NOT ($testResult -imatch 'Test Run Successful.')){							
+    			    $testsPassed = $false
+			    }        
+            }            
         }        
     }
 
