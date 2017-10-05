@@ -28,12 +28,12 @@ Function New-Lib.Release
             Write-Host "Initialization failed. Verify target solution exists." -ForegroundColor Red -BackgroundColor Black
             return
         }
-        
+
         #assert project paths
         $allPathsOk = $true        
         $conf.Projects.Values | % { 
             $allPathsOk= $allPathsOk -and (Test-PathVerbose $_.Path)
-            if($_.TestPath -ne "skip"){ $allPathsOk= $allPathsOk-and (Test-PathVerbose $_.TestPath) }            
+            if($_.TestPath -ne $null){ $allPathsOk= $allPathsOk-and (Test-PathVerbose $_.TestPath) }            
         }
         
         if(-NOT $allPathsOk){
@@ -200,7 +200,7 @@ Function Initialize-Lib.Release.Configuration
             $pInfo = Get-ProjectInfo $conf $releaseParams
             $conf.Projects.Add($pInfo.Name, $pInfo)
         }
-
+                
         $conf.InitSuccess = $true
 
         return $conf
@@ -225,8 +225,8 @@ Function Get-ProjectInfo
         $pInfo.Dir = "$($conf.Solution.Dir)\$($pInfo.Name)"
         $pInfo.Path = "$($pInfo.Dir)\$($pInfo.Name).csproj"
 
-        if($($releaseParams.tests).ToLower() -eq "skip"){
-            $pInfo.TestPath = "skip"
+        if($releaseParams.tests -eq $null){
+            $pInfo.TestPath = $null
         } else {
             $pInfo.TestPath = "$($conf.Solution.Dir)\$($releaseParams.tests)\$($releaseParams.tests).csproj"                
         }
@@ -272,8 +272,9 @@ Function Write-Lib.Release.Configuration
         }
 
         $configuration.GetEnumerator() | % {
-                                
-            if(($_.Value.GetType().fullname) -eq "System.Collections.HashTable"){
+            if($_.Value -eq $null){
+                Write-HostIfVerbose "$($spacer)$($_.Key) : null" -ForegroundColor DarkGray
+            } elseif(($_.Value.GetType().fullname) -eq "System.Collections.HashTable"){
                 Write-HostIfVerbose "$($spacer)[$($_.Key)]" -ForegroundColor Gray
                 Write-Lib.Release.Configuration $_.Value $level
             }
@@ -376,8 +377,8 @@ Function Test-Projects
     Process {
         $Projects.Values | % {
 
-            if($_.TestPath.ToLower() -eq "skip"){
-               Write-HostIfVerbose "Skipping tests for $($_.Name) - skip tests flag set"            
+            if($_.TestPath -eq $null){
+               Write-HostIfVerbose "Skipping tests for $($_.Name)"
             } else {
                 Write-HostIfVerbose "Testing $($_.TestPath)" -ForegroundColor Gray
                 $testResult = dotnet test $_.TestPath --configuration $Buildconfiguration --no-build | Out-String
