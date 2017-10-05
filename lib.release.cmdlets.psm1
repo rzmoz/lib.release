@@ -229,14 +229,16 @@ Function Get-ProjectInfo
         
         $pInfo.Major = $releaseParams.major
         $pInfo.Minor = $releaseParams.minor
-        $pInfo.Version = "$($pInfo.Major).$($pInfo.Minor).$($conf.Git.Commits)"
-        $pInfo.SemVer10 = $pInfo.Version    
-            
-	    if(-NOT ([String]::IsNullOrEmpty($releaseParams.prerelease))){
-		    $releaseParams.prerelease= "-$($releaseParams.prerelease)"
+        $pInfo.Patch = $releaseParams.patch
+        $pInfo.PreRelease = $releaseParams.prerelease -replace "{{gitcommits}}", "$($conf.Git.Commits)" -replace "{{date}}", "$(Get-Date -Format 'yyMMdd')"
+        $pInfo.SemVer10 = "$($pInfo.Major).$($pInfo.Minor).$($pInfo.Patch)"
+        $preRelease = ($pInfo.PreRelease)
+
+	    if(-NOT ([String]::IsNullOrEmpty($preRelease))){
+		    $preRelease = "-$($preRelease)"
 	    }
     
-        $pInfo.SemVer20 = "$($pInfo.semver10)$($releaseParams.prerelease)+$($conf.Git.ShortHash)"
+        $pInfo.SemVer20 = "$($pInfo.semver10)$($preRelease)+$($conf.Git.ShortHash)"
 
         return $pInfo
 	}
