@@ -24,8 +24,6 @@ Function New-Lib.Release
         
         $conf | Write-Lib.Release.Configuration
 
-return
-
         #assert project paths
         $allPathsOk = $true        
         $conf.Projects.Values | % { 
