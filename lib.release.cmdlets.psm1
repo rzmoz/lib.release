@@ -24,10 +24,7 @@ Function New-Lib.Release
         
         $conf | Write-Lib.Release.Configuration
 
-        if(-NOT($conf.InitSuccess)){ 
-            Write-Host "Initialization failed. Verify target solution exists." -ForegroundColor Red -BackgroundColor Black
-            return
-        }
+return
 
         #assert project paths
         $allPathsOk = $true        
@@ -199,9 +196,7 @@ Function Initialize-Lib.Release.Configuration
         foreach($releaseParams in $conf.Release.Params) {
             $pInfo = Get-ProjectInfo $conf $releaseParams
             $conf.Projects.Add($pInfo.Name, $pInfo)
-        }
-                
-        $conf.InitSuccess = $true
+        }                
 
         return $conf
     }
