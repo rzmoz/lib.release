@@ -6,80 +6,62 @@ Function New-Lib.Release
         [string]$SolutionName,
         [switch]$NoNugets = $false,
         [switch]$NoTests = $false,        
-        [string]$BuildConfiguration = "release",
-        [string]$ScanRootDir = "c:\projects"
+        [string]$LibRootDir = "c:\projects"
     )
 
     Begin{
         $currentDir = (Get-Location).Path
-
-        Write-HostIfVerbose "Initializing $($SolutionName) for release" -ForegroundColor Cyan                
+        Write-H1 "Initializing $($SolutionName) for release"
+        $solutionDir = [System.IO.Path]::Combine($LibRootDir,$SolutionName).TrimEnd('\')
+        
     }
 
     Process {
+        if((Enter-Dir $solutionDir)) {
+            $conf = Initialize-Lib.Release.Configuration $SolutionName -LibRootDir $LibRootDir
 
-        Write-Progress -Activity "Initializing $($SolutionName) for release" -Status "Initializing configuration"
-        
-        $conf = Initialize-Lib.Release.Configuration $SolutionName -buildConfiguration $BuildConfiguration -ScanRootDir $ScanRootDir -NoTests:$NoTests -NoNugets:$NoNugets
-        
-        $conf | Write-Lib.Release.Configuration
+            $conf | Write-Lib.Release.Configuration
 
-        #assert project paths
-        $allPathsOk = $true        
-        $conf.Projects.Values | % { 
-            $allPathsOk= $allPathsOk -and (Test-PathVerbose $_.Path)
-            if($_.TestPath -ne $null){ $allPathsOk= $allPathsOk-and (Test-PathVerbose $_.TestPath) }            
-        }
-        
-        if(-NOT $allPathsOk){
-            Write-Error "Aborting..."
-            return
-        }        
-        
-        if((Enter-Dir $conf.Solution.Dir)) {
+            if($conf.InitSuccess -ne $true){
+                Write-Error "Aborting..."
+                return
+            }        
+            
             try{                
                 ######### Initialize Git Dir #########    
-                Write-Progress -Activity "Initializing $($SolutionName) for release" -Status "Initializing git dir"
-                
-                Write-HostIfVerbose "Cleaning $((Get-Location).Path)" -ForegroundColor Cyan
+                Write-H1 "Cleaning $((Get-Location).Path)"
                 $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
                 $gitStatus = git status | Out-String
-                Write-HostIfVerbose $gitStatus 
+                Write-Line $gitStatus
 		        if($gitStatus -imatch $gitGoodToGoNeedle){
                     $gitClean = git clean -d -x -f | Out-String
-                    if(-NOT([string]::IsNullOrEmpty($gitClean))){ Write-HostIfVerbose $gitClean } #clean output is empty if nothing to clean so we need to check if string is empty
+                    if(-NOT([string]::IsNullOrEmpty($gitClean))){ Write-Line $gitClean } #clean output is empty if nothing to clean so we need to check if string is empty
     		    } else {
-                    Write-Host "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..." -ForegroundColor Red -BackgroundColor Black
-                    Write-Host "$($gitStatus)" -ForegroundColor Red -BackgroundColor Black
+                    Write-Problem "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..."
+                    Write-Problem "$($gitStatus)"
                     return
                 }     
                 
                 #patch project version
-                Write-Progress -Activity "dotnet" -Status "Patching versions"
-                Write-HostIfVerbose "Patching project versions" -ForegroundColor Cyan
+                Write-H1 "Patching project versions"
                 $conf.Projects.Values | % { Update-ProjectVersion $_.Path $_.SemVer10 $_.SemVer20 }
 
                 #restore projects
-                Write-Progress -Activity "dotnet" -Status "Restoring"
-                Write-HostIfVerbose "Restoring Nugets" -ForegroundColor Cyan
-                $conf.Projects.Values | % { $_.Path } | % { 
-                    Write-HostIfVerbose "Restoring $($_)" -ForegroundColor Gray
-                    $restore = dotnet restore $_ | Out-String | Write-HostIfVerbose
-                    #TODO: Write in red if error
-                }
+                Write-H1  "Restoring $($conf.Solution.Path)"                    
+                $restore = dotnet restore $conf.Solution.Path | Out-String | Write-Line
+                #TODO: Write in red if error
+                
                                 
                 #build sln
-                Write-Progress -Activity "dotnet" -Status "Building"
-                Write-HostIfVerbose "Building $($conf.Solution.Path)" -ForegroundColor Cyan
-                dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String | Write-HostIfVerbose
+                Write-H1 "Building $($conf.Solution.Path)"
+                dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String | Write-Line
                 #TODO: Write in red if error
                 
                 #tests
-                if($conf.Tests.Disabled) {
-                    Write-HostIfVerbose "Skipping tests. -NoTests flag set" -ForegroundColor Yellow
+                if($NoTests) {
+                    Write-Warning "Skipping tests. -NoTests flag set"
                 } else {
-                    Write-Progress -Activity "dotnet" -Status "Testing"
-                    Write-HostIfVerbose "Testing release" -ForegroundColor Cyan
+                    Write-H1 "Testing release"
                     if(-NOT($conf.Projects | Test-Projects -BuildConfiguration $conf.Build.Configuration)){
                         return
                     }
@@ -87,40 +69,40 @@ Function New-Lib.Release
                 
                 #nugets
                 #clean output dir if exists
-                Write-Progress -Activity "Nugets" -Status "Cleaning output dir"
-                Write-HostIfVerbose "Cleaning OutPut dir: $($conf.Nugets.OutputDir)" -ForegroundColor Cyan
-                if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)\*" -Force | Out-String | Write-HostIfVerbose }
+                Write-H1  "Cleaning OutPut dir: $($conf.Nugets.OutputDir)"
+                if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)\*" -Force | Out-String | Write-Line }
                 
                 #create aritfacts dir
-                New-Item $conf.Nugets.OutputDir -ItemType Directory -Force | Out-String | Write-HostIfVerbose
+                New-Item $conf.Nugets.OutputDir -ItemType Directory -Force | Out-String | Write-Line
 
-                if($conf.Nugets.Disabled){
-                    Write-HostIfVerbose "Skipping nugets. -NoNugets flag set" -ForegroundColor Yellow -BackgroundColor Black                    
+                if($NoNugets){
+                    Write-Warning "Skipping nugets. -NoNugets flag set"
                 } else {
-                    Write-Progress -Activity "Nugets" -Status "Packaging"
-                    Write-HostIfVerbose "Packaging Nugets" -ForegroundColor Cyan
+                    Write-H1 "Packaging Nugets"
                     $conf.Projects | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -Buildconfiguration $conf.Build.Configuration | Out-Null #nuget.exe writes its own error messages
                 }
 
             } finally {
-                Write-Progress -Activity "Post build" -Status "Cleaning up garbage"
-                Write-HostIfVerbose "Cleaning up..." -ForegroundColor Cyan
+                Write-H1 "Cleaning up..."
 
                 #clean output Dir if exists
-                if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)\*" -Force | Write-Host -ForegroundColor DarkGray }
-		        if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)" -Force | Write-Host -ForegroundColor DarkGray }
+                if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)\*" -Force | Write-Line}
+		        if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)" -Force | Write-Line }
 
 		        #revert project version
-                $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion                
-                
-                Write-Progress -Activity "Post build" -Completed
-            }            
+                $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion
+            }
+
+        } else {
+            Write-Problem "Solution dir not found. Aborting..."
+            return
         }
-        
     }
     End{        
         #bugging out!
-        Enter-Dir $currentDir | Out-Null
+        if($currentDir -ne (Get-Location).Path){
+            Enter-Dir $currentDir | Out-Null
+        }        
     }
 }
 
@@ -135,146 +117,123 @@ Function Initialize-Lib.Release.Configuration
     Param (
         [Parameter(Mandatory=$true)]
         [string]$SolutionName,      
-        [Parameter(Mandatory=$true)]  
-        [string]$BuildConfiguration,
+        [Parameter(Mandatory=$false)]
+        [string]$BuildConfiguration ='release',
         [Parameter(Mandatory=$true)]
-        [string]$ScanRootDir,        
-        [Parameter(Mandatory=$true)]
-        [switch]$NoTests = $false,
-        [Parameter(Mandatory=$true)]
-        [switch]$NoNugets = $false
+        [string]$LibRootDir
     )
 	PROCESS {
-
         [HashTable]$conf = @{}
-        $conf.InitSuccess = $false
+        $conf.InitSuccess = $true
 
         #----- sln -----#
         [HashTable]$conf.Solution = @{}
-        $conf.Solution.Name = $SolutionName.Trim('.','\')
-        $conf.Solution.Dir = [System.IO.Path]::Combine($ScanRootDir,$SolutionName).TrimEnd('\')
-        $conf.Solution.Path = "$($conf.Solution.Dir)\$($conf.Solution.Name).sln"        
-
-        if(-NOT(Test-PathVerbose $conf.Solution.Dir)){
-            return $conf
-        }
+        $conf.Solution.Path = (Get-Item *.sln).FullName
         
+        #----- git -----#
+        [HashTable]$conf.Git = @{}
+        $conf.Git.Branch = git rev-parse --abbrev-ref HEAD
+        $conf.Git.Hash = git rev-parse --verify HEAD
+        $conf.Git.ShortHash = git log --pretty=format:'%h' -n 1
+        $conf.Git.Commits = git rev-list --all --count $conf.Git.Branch
+
         #----- msbuild -----#
         [HashTable]$conf.Build = @{}
         $conf.Build.Configuration = $BuildConfiguration        
 
+        #----- Release -----#
+        [HashTable]$conf.Release = @{}
+        $libReleaseParams = Get-Content -Raw -Path "$($(Get-Location).Path)\lib.release.json" | ConvertFrom-Json
+        [HashTable]$conf.Release.Version = @{}        
+        $conf.Release.Version.SemVer10 = $libReleaseParams.version.semver10
+        $conf.Release.Version.PreRelease = $libReleaseParams.version.prerelease
+
+        [HashTable]$conf.Release.Override = @{}
+        if($libReleaseParams.override -ne $null){
+            $libReleaseParams.override.getenumerator() | % {
+                $override = @{}
+                $override.Name = $_.Name
+                $override.SemVer10 = $_.semver10
+                $override.PreRelease = $_.prerelease
+                $conf.Release.Override.Add($_.Name.ToLower(), $override)
+            }        
+        }
+        #----- projects -----#        
+        [HashTable]$conf.Projects = @{}        
+        foreach($libProject in $(Get-ChildItem *.csproj -Depth 0 -Exclude *tests*)) {
+            $projectInfo = @{}
+            $projectInfo.Name = $libProject.Name -replace ".csproj",""
+            $projectInfo.Path = $libProject.FullName
+
+            #default version
+            $projectInfo.SemVer10 = $conf.Release.Version.SemVer10
+            $projectInfo.PreRelease = $conf.Release.Version.PreRelease
+
+            $projectOverride = $conf.Release.Override[$projectInfo.Name.ToLower()]
+            
+            if($projectOverride -ne $null){
+                $projectInfo.SemVer10 = $projectOverride.SemVer10
+                $projectInfo.PreRelease = $projectOverride.PreRelease
+            }
+            
+	        if(-NOT ([String]::IsNullOrEmpty($projectInfo.PreRelease ))){
+    		    $projectInfo.PreRelease  = "-$($projectInfo.PreRelease )"
+	        }
+    
+            $projectInfo.SemVer20 = "$($projectInfo.SemVer10)$($projectInfo.PreRelease)+$($conf.Git.ShortHash)"
+            $conf.Projects.Add($projectInfo.Name,$projectInfo)
+        }
+
         #----- test -----#
         [HashTable]$conf.Tests = @{}
-        $conf.Tests.Disabled = $NoTests    
+        foreach($testProject in $(Get-ChildItem *.csproj -Depth 0 -Filter *tests*)) {
+            $testInfo = @{}
+            $testInfo.Name = $testProject.Name -replace ".csproj",""
+            $testInfo.Path = $testProject.FullName
+            $conf.Tests.Add($testInfo.Name,$testInfo)
+        }
 
         #----- nuget -----#
         [hashtable]$conf.Nugets = @{}
-        $conf.Nugets.OutputDir = "$($conf.Solution.Dir)\Lib.Release.Output"
-        $conf.Nugets.Disabled = $NoNugets
+        $conf.Nugets.OutputDir = "$($(Get-Location).Path)\Lib.Release.Output"
         
-        #----- release -----#
-        [HashTable]$conf.Release = @{}
-        $conf.Release.Params = Get-Content -Raw -Path "$($conf.Solution.Dir)\lib.release.json"  | ConvertFrom-Json
-        
-        #----- git -----#
-        [HashTable]$conf.Git = @{}
-
-        if((Enter-Dir $conf.Solution.Dir)) {
-            $conf.Git.Branch = git rev-parse --abbrev-ref HEAD
-            $conf.Git.Hash = git rev-parse --verify HEAD
-            $conf.Git.ShortHash = git log --pretty=format:'%h' -n 1
-            $conf.Git.Commits = git rev-list --all --count $conf.Git.Branch
-        } else {
-            return
-        }
-        
-        #----- projects -----#
-        
-        [HashTable]$conf.Projects = @{}        
-        foreach($releaseParams in $conf.Release.Params) {
-            $pInfo = Get-ProjectInfo $conf $releaseParams
-            $conf.Projects.Add($pInfo.Name, $pInfo)
-        }                
-
         return $conf
     }
 }
-
-Function Get-ProjectInfo
-{
-	[CmdletBinding()]
-    Param (
-        [Parameter(Position=0, 
-        Mandatory=$true )]
-        [HashTable]$conf,
-        [Parameter(Position=1, 
-        Mandatory=$true )]
-        [PSCustomObject]$releaseParams       
-    )
-
-	PROCESS {
-        [HashTable]$pInfo = @{}
-        $pInfo.Name = "$($releaseParams.name)"
-        $pInfo.Dir = "$($conf.Solution.Dir)\$($pInfo.Name)"
-        $pInfo.Path = "$($pInfo.Dir)\$($pInfo.Name).csproj"
-
-        if($releaseParams.tests -eq $null){
-            $pInfo.TestPath = $null
-        } else {
-            $pInfo.TestPath = "$($conf.Solution.Dir)\$($releaseParams.tests)\$($releaseParams.tests).csproj"                
-        }
-
-        
-        $pInfo.Major = $releaseParams.major
-        $pInfo.Minor = $releaseParams.minor
-        $pInfo.Patch = $releaseParams.patch
-        $pInfo.PreRelease = $releaseParams.prerelease -replace "{{gitcommits}}", "$($conf.Git.Commits)" -replace "{{date}}", "$(Get-Date -Format 'yyMMdd')"
-        $pInfo.SemVer10 = "$($pInfo.Major).$($pInfo.Minor).$($pInfo.Patch)"
-        $preRelease = ($pInfo.PreRelease)
-
-	    if(-NOT ([String]::IsNullOrEmpty($preRelease))){
-		    $preRelease = "-$($preRelease)"
-	    }
-    
-        $pInfo.SemVer20 = "$($pInfo.semver10)$($preRelease)+$($conf.Git.ShortHash)"
-
-        return $pInfo
-	}
-}
-
 Function Write-Lib.Release.Configuration
 {
     [CmdletBinding()]
     Param (
         [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
-        [HashTable]$configuration,
+        [HashTable]$conf,
         [Parameter(Position=1)]
         [Int]$level = 0
     )
 
     Begin {
-        if($level -eq 0){
-            Write-HostIfVerbose "[Configuration]" -ForegroundColor Gray
+        if($level -eq 0) {
+            Write-H2 "[Configuration]"
         }
+
+        $level++
     }
 
     Process {
-        $level++
-
         $spacer = ""
         for($i=0; $i -lt $level; $i++){
             $spacer += "  "
         }
-
-        $configuration.GetEnumerator() | % {
+        
+        $conf.GetEnumerator() | % {
             if($_.Value -eq $null){
-                Write-HostIfVerbose "$($spacer)$($_.Key) : null" -ForegroundColor DarkGray
+                Write-Line "$($spacer)$($_.Key) : null"
+                
             } elseif(($_.Value.GetType().fullname) -eq "System.Collections.HashTable"){
-                Write-HostIfVerbose "$($spacer)[$($_.Key)]" -ForegroundColor Gray
+                Write-H2 "$($spacer)[$($_.Key)]"
                 Write-Lib.Release.Configuration $_.Value $level
             }
             else {
-                Write-HostIfVerbose "$($spacer)$($_.Key) : $($_.Value)" -ForegroundColor DarkGray
+                Write-Line "$($spacer)$($_.Key) : $($_.Value)"
             }            
         }    
     }
@@ -297,7 +256,7 @@ Function Update-ProjectVersion
     )
   
 	Process {
-        Write-HostIfVerbose "Patching $Path" -ForegroundColor Gray
+        Write-H2 "Patching $Path"
         $TmpFile = $Path + ".tmp"
 
         #backup file for reverting later
@@ -309,7 +268,7 @@ Function Update-ProjectVersion
 	    #ensure version nodes exist
 	    $propertyGroupNode = $xml.SelectSingleNode("//Project/PropertyGroup")
 	    if ($propertyGroupNode -eq $null) {
-    		Write-Error "csproj format not recognized. Is this a valid VS 17 project file?" |-ForegroundColor Red
+    		Write-Problem "csproj format not recognized. Is this a valid VS 17 project file?"
 		    return
 	    }
 
@@ -325,7 +284,7 @@ Function Update-ProjectVersion
                 $propertyGroupNode.SelectSingleNode("//$($_)").InnerText = $SemVer20
             }
 
-            Write-HostIfVerbose "  $($_): $($propertyGroupNode.SelectSingleNode("//$($_)").InnerText)"
+            Write-Line "  $($_): $($propertyGroupNode.SelectSingleNode("//$($_)").InnerText)"
         }
                 
     	#write to project file
@@ -344,7 +303,7 @@ Function Undo-ProjectVersion
     Process{
         $Path | % { 
             $TmpFile = $_ + ".tmp"
-            Write-HostIfVerbose "Reverting $TmpFile"
+            Write-Line "Reverting $TmpFile"
             if(Test-Path($TmpFile)){
                 Move-Item $TmpFile $_ -Force
             }        
@@ -373,12 +332,12 @@ Function Test-Projects
         $Projects.Values | % {
 
             if($_.TestPath -eq $null){
-               Write-HostIfVerbose "Skipping tests for $($_.Name)"
+               Write-Line  "Skipping tests for $($_.Name)"
             } else {
-                Write-HostIfVerbose "Testing $($_.TestPath)" -ForegroundColor Gray
+                Write-H2 "Testing $($_.TestPath)"
                 $testResult = dotnet test $_.TestPath --configuration $Buildconfiguration --no-build | Out-String
 						
-			    $testResult | Write-HostIfVerbose 
+			    $testResult | Write-Line
 
 			    if(-NOT ($testResult -imatch 'Test Run Successful.')){							
     			    $testsPassed = $false
@@ -415,26 +374,24 @@ Function Publish-Nugets
         $allNugetsPushed = $true
     }
     
-    Process {        
+    Process {
 
         #create nugets and place in output Dir dir
         $Projects.Values | % {
-		    Write-HostIfVerbose "Packing $($_.Path) -v $($_.SemVer10)"
-			dotnet pack $_.Path --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-HostIfVerbose
+		    Write-Line "Packing $($_.Path) -v $($_.SemVer10)"
+			dotnet pack $_.Path --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-Line
 			}
                 				        
         $apiKey = Read-Host "Please enter nuget API key"
         
-        Write-Progress -Activity "Nugets" -Status "Publishing"
-
         #https://docs.nuget.org/consume/command-line-reference
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
-            Write-HostIfVerbose $_.FullName -ForegroundColor Gray
+            Write-H2 $_.FullName
             $result = & "$($PSScriptRoot)\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Out-String
 
             if(-NOT($result -imatch 'Your package was pushed.')){
                 $allNugetsPushed = $false
-                Write-HostIfVerbose $result -ForegroundColor Red -BackgroundColor Black
+                Write-Problem $result
             }
         }
         
@@ -456,13 +413,13 @@ Function Test-PathVerbose
         [String]$Path
     )
     PROCESS {
-        Write-HostIfVerbose "Asserting path: $($Path) -> " -NoNewline
+        Write-Line "Asserting path: $($Path) -> " -NoNewLine
 
         if(Test-Path $Path){
-            Write-HostIfVerbose "Found!"
+            Write-Line "Found!"
             return $true
         } else {
-            Write-HostIfVerbose "Not Found!" -ForegroundColor Red -BackgroundColor Black
+            Write-Problem "Not Found!"
             return $false
         }
     }
@@ -478,40 +435,74 @@ Function Enter-Dir
     PROCESS {
         
         if(Test-Path $Path){
-            Write-HostIfVerbose "Entered: $($Path) From $((Get-Location).Path)"
+            Write-Line "Entered: $($Path) From $((Get-Location).Path)"
             sl $Path            
             return $true
         } else {
-            Write-Error "Failed to enter: $($Path)"
+            Write-Warning "Dir not found: $($Path)"
             return $false
         }
     }
 }
 
-Function Write-HostIfVerbose
+########################################################################
+#                                 Write                                #
+########################################################################
+
+Function Write-H1
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [String]$message
+    )
+    Process {        
+        Write-Host $message -ForegroundColor Cyan
+    }
+}
+Function Write-H2
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [String]$message
+    )
+    Process {        
+        Write-Host $message -ForegroundColor Gray
+    }
+}
+Function Write-Warning
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [String]$message
+    )
+    Process {        
+        Write-Host $message -ForegroundColor Yellow -BackgroundColor Black
+    }
+}
+Function Write-Problem
+{
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [String]$message
+    )
+    Process {        
+        Write-Host $message -ForegroundColor Red -BackgroundColor Black
+    }
+}
+
+Function Write-Line
 {
     [CmdletBinding()]
     Param (
         [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
         [String]$message,
-        [ConsoleColor]$ForegroundColor = [ConsoleColor]::DarkGray,
-        [ConsoleColor]$BackgroundColor,
-        [Switch]$NoNewline = $false
+        [Switch]$NoNewLine
     )
-    Process {
-        if(Test-Verbose) {
-            if($BackgroundColor) {
-                Write-Host $message -ForegroundColor $ForegroundColor -BackgroundColor $BackgroundColor -NoNewline:$NoNewline
-            } else {
-                Write-Host $message -ForegroundColor $ForegroundColor -NoNewline:$NoNewline
-             
-            }
-        }
+    Process {        
+        Write-Host $message -ForegroundColor DarkGray -NoNewline:$NoNewLine
     }
-}
-
-Function Test-Verbose {
-    [CmdletBinding()]
-    param()
-    [System.Management.Automation.ActionPreference]::SilentlyContinue -ne $VerbosePreference
 }
