@@ -79,7 +79,7 @@ Function New-Lib.Release
                     Write-Warning "Skipping nugets. -NoNugets flag set"
                 } else {
                     Write-H1 "Packaging Nugets"
-                    $conf.Projects | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -Buildconfiguration $conf.Build.Configuration | Out-Null #nuget.exe writes its own error messages
+                    $conf.Projects | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -Buildconfiguration $conf.Build.Configuration
                 }
 
             } finally {
@@ -383,12 +383,11 @@ Function Publish-Nugets
 			}
                 				        
         $apiKey = Read-Host "Please enter nuget API key"
-        
-        #https://docs.nuget.org/consume/command-line-reference
+                
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
             Write-H2 $_.FullName
-            $result = & "$($PSScriptRoot)\nuget.exe" push $_.FullName -ApiKey $apiKey -Source "https://api.nuget.org/v3/index.json" -NonInteractive | Out-String
-
+            $result = dotnet nuget push $_.FullName --source "https://api.nuget.org/v3/index.json" --api-key $apiKey --no-symbols --force-english-output | out-string
+            
             if(-NOT($result -imatch 'Your package was pushed.')){
                 $allNugetsPushed = $false
                 Write-Problem $result
