@@ -379,7 +379,7 @@ Function Publish-Nugets
         #create nugets and place in output Dir dir
         $Projects.Values | % {
 		    Write-Line "Packing $($_.Path) -v $($_.SemVer20)"
-			dotnet pack $_.Path --configuration $BuildConfiguration /p:PackageVersion=$($_.SemVer20) --no-build --output $NugetsOutputDir | Out-String | Write-Line
+			    dotnet pack $_.Path --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-Line
 			}
                 				        
         $apiKey = Read-Host "Please enter nuget API key"
