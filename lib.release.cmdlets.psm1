@@ -12,8 +12,7 @@ Function New-Lib.Release
     Begin{
         $currentDir = (Get-Location).Path
         Write-H1 "Initializing $($SolutionName) for release"
-        $solutionDir = [System.IO.Path]::Combine($LibRootDir,$SolutionName).TrimEnd('\')
-        
+        $solutionDir = [System.IO.Path]::Combine($LibRootDir, $SolutionName).TrimEnd('\')
     }
 
     Process {
@@ -25,10 +24,12 @@ Function New-Lib.Release
             if($conf.InitSuccess -ne $true){
                 Write-Error "Aborting..."
                 return
-            }        
+            }     
             
             try{                
                 ######### Initialize Git Dir #########    
+
+                
                 Write-H1 "Cleaning $((Get-Location).Path)"
                 $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
                 $gitStatus = git status | Out-String
@@ -44,14 +45,13 @@ Function New-Lib.Release
                 
                 #patch project version
                 Write-H1 "Patching project versions"
-                $conf.Projects.Values | % { Update-ProjectVersion $_.Path $_.SemVer10 $_.SemVer20 }
+                $conf.Releases.Values | ForEach-Object { Update-ProjectVersion $_.Path $_.Version $_.SemVer20 }
 
                 #restore projects
                 Write-H1  "Restoring $($conf.Solution.Path)"                    
-                $restore = dotnet restore $conf.Solution.Path | Out-String | Write-Line
+                dotnet restore $conf.Solution.Path | Out-String | Write-Line
                 #TODO: Write in red if error
-                
-                                
+                                                
                 #build sln
                 Write-H1 "Building $($conf.Solution.Path)"
                 dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String | Write-Line
@@ -61,8 +61,8 @@ Function New-Lib.Release
                 if($NoTests) {
                     Write-Warning "Skipping tests. -NoTests flag set"
                 } else {
-                    Write-H1 "Testing release"
-                    if(-NOT($conf.Projects | Test-Projects -BuildConfiguration $conf.Build.Configuration)){
+                    Write-H1 "Testing $($conf.Build.Configuration)"
+                    if(-NOT($conf.Tests | Test-Projects -BuildConfiguration $conf.Build.Configuration)){
                         return
                     }
                 }
@@ -79,7 +79,7 @@ Function New-Lib.Release
                     Write-Warning "Skipping nugets. -NoNugets flag set"
                 } else {
                     Write-H1 "Packaging Nugets"
-                    $conf.Projects | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -Buildconfiguration $conf.Build.Configuration
+                    $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -Buildconfiguration $conf.Build.Configuration
                 }
 
             } finally {
@@ -90,7 +90,7 @@ Function New-Lib.Release
 		        if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)" -Force | Write-Line }
 
 		        #revert project version
-                $conf.Projects.Values | % { $_.Path } | Undo-ProjectVersion
+                $conf.Releases.Values | ForEach-Object { $_.Path } | Undo-ProjectVersion
             }
 
         } else {
@@ -142,54 +142,29 @@ Function Initialize-Lib.Release.Configuration
         $conf.Build.Configuration = $BuildConfiguration        
 
         #----- Release -----#
-        [HashTable]$conf.Release = @{}
+        [HashTable]$conf.Releases = @{}
         $libReleaseParams = Get-Content -Raw -Path "$($(Get-Location).Path)\lib.release.json" | ConvertFrom-Json
-        [HashTable]$conf.Release.Version = @{}        
-        $conf.Release.Version.SemVer10 = $libReleaseParams.version.semver10
-        $conf.Release.Version.PreRelease = $libReleaseParams.version.prerelease
+        
+        $libReleaseParams.releases.GetEnumerator() | ForEach-Object {
+                $release = @{}
+                $release.Name = $_.name
+                $release.Version = $_.version
+                $release.PreRelease = $_.prerelease
+                $release.Path = $(Get-ChildItem -Path "." -Recurse -Depth 1 -Filter "*$($_.name).csproj").FullName
 
-        [HashTable]$conf.Release.Override = @{}
-        if($libReleaseParams.override -ne $null){
-            $libReleaseParams.override.getenumerator() | % {
-                $override = @{}
-                $override.Name = $_.Name
-                $override.SemVer10 = $_.semver10
-                $override.PreRelease = $_.prerelease
-                $conf.Release.Override.Add($_.Name.ToLower(), $override)
-            }        
-        }
-        #----- projects -----#        
-        [HashTable]$conf.Projects = @{}        
-        foreach($libProject in $(Get-ChildItem *.csproj -Depth 0 -Exclude *tests*)) {
-            $projectInfo = @{}
-            $projectInfo.Name = $libProject.Name -replace ".csproj",""
-            $projectInfo.Path = $libProject.FullName
-
-            #default version
-            $projectInfo.SemVer10 = $conf.Release.Version.SemVer10
-            $projectInfo.PreRelease = $conf.Release.Version.PreRelease
-
-            $projectOverride = $conf.Release.Override[$projectInfo.Name.ToLower()]
-            
-            if($projectOverride -ne $null){
-                $projectInfo.SemVer10 = $projectOverride.SemVer10
-                $projectInfo.PreRelease = $projectOverride.PreRelease
+                if(-NOT ([String]::IsNullOrEmpty($release.PreRelease))){
+                    $release.PreRelease  = "-$($release.PreRelease )"
+                }
+                $release.SemVer20 = "$($release.Version)$($release.PreRelease)+$($conf.Git.ShortHash)"
+                $conf.Releases.Add($_.Name.ToLower(), $release)
             }
-            
-	        if(-NOT ([String]::IsNullOrEmpty($projectInfo.PreRelease ))){
-    		    $projectInfo.PreRelease  = "-$($projectInfo.PreRelease )"
-	        }
-    
-            $projectInfo.SemVer20 = "$($projectInfo.SemVer10)$($projectInfo.PreRelease)+$($conf.Git.ShortHash)"
-            $conf.Projects.Add($projectInfo.Name,$projectInfo)
-        }
-
-        #----- test -----#
+        #----- tests -----#
         [HashTable]$conf.Tests = @{}
-        foreach($testProject in $(Get-ChildItem *.csproj -Depth 0 -Filter *tests*)) {
+
+        $libReleaseParams.tests.GetEnumerator() | ForEach-Object {
             $testInfo = @{}
-            $testInfo.Name = $testProject.Name -replace ".csproj",""
-            $testInfo.Path = $testProject.FullName
+            $testInfo.Name = $_
+            $testInfo.Path = $(Get-ChildItem -Path "." -Recurse -Depth 1 -Filter "*$($_).csproj").FullName
             $conf.Tests.Add($testInfo.Name,$testInfo)
         }
 
@@ -224,7 +199,7 @@ Function Write-Lib.Release.Configuration
             $spacer += "  "
         }
         
-        $conf.GetEnumerator() | % {
+        $conf.GetEnumerator() | ForEach-Object {
             if($_.Value -eq $null){
                 Write-Line "$($spacer)$($_.Key) : null"
                 
@@ -319,7 +294,7 @@ Function Test-Projects
     [CmdletBinding()]
     Param (
         [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
-        [HashTable]$Projects,
+        [HashTable]$TestProjects,
         [Parameter(Mandatory=$true)]
         [String]$Buildconfiguration
     )
@@ -329,19 +304,22 @@ Function Test-Projects
     }
 
     Process {
-        $Projects.Values | % {
+        $TestProjects.GetEnumerator() | ForEach-Object {
 
-            if($_.TestPath -eq $null){
-               Write-Line  "Skipping tests for $($_.Name)"
+            Write-H2 "Testing $($_.key)"
+
+            if(-NOT(Test-Path($_.value.Path))) {
+               Write-Error  "$($_.value.Name) not found!"
             } else {
-                Write-H2 "Testing $($_.TestPath)"
-                $testResult = dotnet test $_.TestPath --configuration $Buildconfiguration --no-build | Out-String
+                Write-Line "Testing $($_.value.Path)"
+                $testResult = dotnet test $_.value.Path --configuration $Buildconfiguration --no-build | Out-String
 						
 			    $testResult | Write-Line
 
 			    if(-NOT ($testResult -imatch 'Test Run Successful.')){							
     			    $testsPassed = $false
-			    }        
+                }
+                
             }            
         }        
     }
