@@ -27,35 +27,31 @@ Function New-Lib.Release
             }     
             
             try{                
-                ######### Initialize Git Dir #########    
-
+                ######### Initialize Git Dir #########
                 
                 Write-H1 "Cleaning $((Get-Location).Path)"
                 $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
                 $gitStatus = git status | Out-String
                 Write-Line $gitStatus
 		        if($gitStatus -imatch $gitGoodToGoNeedle){
-                    $gitClean = git clean -d -x -f | Out-String
-                    if(-NOT([string]::IsNullOrEmpty($gitClean))){ Write-Line $gitClean } #clean output is empty if nothing to clean so we need to check if string is empty
+                    git clean -d -x -f | Out-String | Write-Line 
     		    } else {
                     Write-Problem "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..."
-                    Write-Problem "$($gitStatus)"
                     return
                 }     
                 
                 #patch project version
                 Write-H1 "Patching project versions"
                 $conf.Releases.Values | ForEach-Object { Update-ProjectVersion $_.Path $_.Version $_.SemVer20 }
-
-                #restore projects
-                Write-H1  "Restoring $($conf.Solution.Path)"                    
-                dotnet restore $conf.Solution.Path | Out-String | Write-Line
-                #TODO: Write in red if error
                                                 
                 #build sln
                 Write-H1 "Building $($conf.Solution.Path)"
-                dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String | Write-Line
-                #TODO: Write in red if error
+                $buildOutput = dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String
+                Write-Line $buildOutput
+                if(-NOT($buildOutput -imatch "Build succeeded")) {
+                    Write-Problem "Build failed"
+                    return
+                }
                 
                 #tests
                 if($NoTests) {
@@ -109,8 +105,6 @@ Function New-Lib.Release
 ########################################################################
 #                             Configuration                            #
 ########################################################################
-
-
 Function Initialize-Lib.Release.Configuration
 {
 	[CmdletBinding()]
@@ -217,7 +211,6 @@ Function Write-Lib.Release.Configuration
 ########################################################################
 #                            Project Version                           #
 ########################################################################
-
 Function Update-ProjectVersion
 {
 	[CmdletBinding()]
@@ -266,7 +259,6 @@ Function Update-ProjectVersion
         $xml.Save($Path)	
 	}
 }
-
 Function Undo-ProjectVersion
 {
 	[CmdletBinding()]
@@ -401,7 +393,6 @@ Function Test-PathVerbose
         }
     }
 }
-
 Function Enter-Dir
 {
     [CmdletBinding()]
@@ -413,7 +404,7 @@ Function Enter-Dir
         
         if(Test-Path $Path){
             Write-Line "Entered: $($Path) From $((Get-Location).Path)"
-            sl $Path            
+            Set-Location $Path            
             return $true
         } else {
             Write-Warning "Dir not found: $($Path)"
@@ -425,7 +416,6 @@ Function Enter-Dir
 ########################################################################
 #                                 Write                                #
 ########################################################################
-
 Function Write-H1
 {
     [CmdletBinding()]
@@ -470,7 +460,6 @@ Function Write-Problem
         Write-Host $message -ForegroundColor Red -BackgroundColor Black
     }
 }
-
 Function Write-Line
 {
     [CmdletBinding()]
