@@ -46,7 +46,7 @@ Function New-Lib.Release
                                                 
                 #build sln
                 Write-H1 "Building $($conf.Solution.Path)"
-                $buildOutput = dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity minimal | Out-String
+                $buildOutput = dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity quiet | Out-String
                 Write-Line $buildOutput
                 if(-NOT($buildOutput -imatch "Build succeeded")) {
                     Write-Problem "Build failed"
