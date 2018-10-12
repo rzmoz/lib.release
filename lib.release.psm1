@@ -17,6 +17,7 @@ Function New-Lib.Release
 
     Process {
         if((Enter-Dir $solutionDir)) {
+            $SolutionName = $SolutionName.TrimStart(".").TrimStart("\\").TrimEnd("\\")
             $conf = Initialize-Lib.Release.Configuration $SolutionName -LibRootDir $LibRootDir
 
             $conf | Write-Lib.Release.Configuration
@@ -34,7 +35,11 @@ Function New-Lib.Release
                 $gitStatus = git status | Out-String
                 Write-Line $gitStatus
 		        if($gitStatus -imatch $gitGoodToGoNeedle){
-                    git clean -d -x -f | Out-String | Write-Line 
+                    Write-Host "Cleaning bin dirs:"
+                    Get-ChildItem "$solutionDir" -Filter "bin" -recurse | ForEach-Object {
+                        Write-Host "Cleaning: $($_.FullName)" -ForegroundColor DarkGray
+                        Remove-Item "$($_.FullName)/*" -Recurse -Force
+                    }
     		    } else {
                     Write-Problem "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..."
                     return
@@ -75,7 +80,7 @@ Function New-Lib.Release
                     Write-Warning "Skipping nugets. -NoNugets flag set"
                 } else {
                     Write-H1 "Packaging Nugets"
-                    $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -Buildconfiguration $conf.Build.Configuration
+                    $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -NugetsSource $conf.Nugets.Source -Buildconfiguration $conf.Build.Configuration
                 }
 
             } finally {
@@ -122,7 +127,7 @@ Function Initialize-Lib.Release.Configuration
 
         #----- sln -----#
         [HashTable]$conf.Solution = @{}
-        $conf.Solution.Path = (Get-Item *.sln).FullName
+        $conf.Solution.Path = (Get-Item "$SolutionName.sln").FullName
         
         #----- git -----#
         [HashTable]$conf.Git = @{}
@@ -164,6 +169,7 @@ Function Initialize-Lib.Release.Configuration
 
         #----- nuget -----#
         [hashtable]$conf.Nugets = @{}
+        $conf.Nugets.Source = $libReleaseParams.nuget.source
         $conf.Nugets.OutputDir = "$($(Get-Location).Path)\Lib.Release.Output"
         
         return $conf
@@ -337,6 +343,8 @@ Function Publish-Nugets
         [Parameter(Mandatory=$true)]
         [String]$NugetsOutputDir,
         [Parameter(Mandatory=$true)]
+        [String]$NugetsSource,
+        [Parameter(Mandatory=$true)]
         [String]$Buildconfiguration
     )
 
@@ -356,7 +364,7 @@ Function Publish-Nugets
                 
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
             Write-H2 $_.FullName
-            $result = dotnet nuget push $_.FullName --source "https://api.nuget.org/v3/index.json" --api-key $apiKey --no-symbols --force-english-output | out-string
+            $result = dotnet nuget push $_.FullName --source $NugetsSource --api-key $apiKey --no-symbols --force-english-output | out-string
             
             if(-NOT($result -imatch 'Your package was pushed.')){
                 $allNugetsPushed = $false
