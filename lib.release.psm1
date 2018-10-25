@@ -70,25 +70,25 @@ Function New-Lib.Release
                 
                 #nugets
                 #clean output dir if exists
-                Write-H1  "Cleaning OutPut dir: $($conf.Nugets.OutputDir)"
-                if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)\*" -Force | Out-String | Write-Line }
+                Write-H1  "Cleaning OutPut dir: $($conf.Nugets.ArtifactsDir)"
+                if(Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)\*" -Force | Out-String | Write-Line }
                 
                 #create aritfacts dir
-                New-Item $conf.Nugets.OutputDir -ItemType Directory -Force | Out-String | Write-Line
+                New-Item $conf.Nugets.ArtifactsDir -ItemType Directory -Force | Out-String | Write-Line
 
                 if($NoNugets){
                     Write-Warning "Skipping nugets. -NoNugets flag set"
                 } else {
                     Write-H1 "Packaging Nugets"
-                    $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.OutputDir -NugetsSource $conf.Nugets.Source -Buildconfiguration $conf.Build.Configuration
+                    $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.ArtifactsDir -NugetsSource $conf.Nugets.Source -Buildconfiguration $conf.Build.Configuration
                 }
 
             } finally {
                 Write-H1 "Cleaning up..."
 
                 #clean output Dir if exists
-                if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)\*" -Force | Write-Line}
-		        if(Test-Path $conf.Nugets.OutputDir) { Remove-Item "$($conf.Nugets.OutputDir)" -Force | Write-Line }
+                if(Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)\*" -Force | Write-Line}
+		        if(Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)" -Force | Write-Line }
 
 		        #revert project version
                 $conf.Releases.Values | ForEach-Object { $_.Path } | Undo-ProjectVersion
@@ -170,7 +170,7 @@ Function Initialize-Lib.Release.Configuration
         #----- nuget -----#
         [hashtable]$conf.Nugets = @{}
         $conf.Nugets.Source = $libReleaseParams.nuget.source
-        $conf.Nugets.OutputDir = "$($(Get-Location).Path)\Lib.Release.Output"
+        $conf.Nugets.ArtifactsDir = "$($(Get-Location).Path)\.lib.release.artifacts"
         
         return $conf
     }
