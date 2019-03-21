@@ -4,6 +4,8 @@ Function New-Lib.Release
     Param (
         [Parameter(Position=0, Mandatory=$true)]
         [string]$SolutionName,
+        [Parameter(Position=1)]
+        [string]$nugetApiKey,
         [switch]$NoNugets = $false,
         [switch]$NoTests = $false,        
         [string]$LibRootDir = "c:\projects"
@@ -27,7 +29,13 @@ Function New-Lib.Release
                 return
             }     
             
-            try{                
+            try{
+#get nuget api key
+if(-NOT($nugetApiKey)){
+    $nugetApiKey = Read-Host "Please enter nuget API key"
+}
+                
+
                 ######### Initialize Git Dir #########
                 
                 Write-H1 "Cleaning $((Get-Location).Path)"
@@ -80,7 +88,7 @@ Function New-Lib.Release
                     Write-Warning "Skipping nugets. -NoNugets flag set"
                 } else {
                     Write-H1 "Packaging Nugets"
-                    $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.ArtifactsDir -NugetsSource $conf.Nugets.Source -Buildconfiguration $conf.Build.Configuration
+                    $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.ArtifactsDir -NugetsSource $conf.Nugets.Source -Buildconfiguration $conf.Build.Configuration -ApiKey $nugetApiKey
                 }
 
             } finally {
@@ -99,7 +107,7 @@ Function New-Lib.Release
             return
         }
     }
-    End{        
+    End{
         #bugging out!
         if($currentDir -ne (Get-Location).Path){
             Enter-Dir $currentDir | Out-Null
@@ -345,7 +353,9 @@ Function Publish-Nugets
         [Parameter(Mandatory=$true)]
         [String]$NugetsSource,
         [Parameter(Mandatory=$true)]
-        [String]$Buildconfiguration
+        [String]$Buildconfiguration,
+        [Parameter(Mandatory=$true)]
+        [String]$ApiKey
     )
 
     Begin {
@@ -358,13 +368,11 @@ Function Publish-Nugets
         $Projects.Values | % {
 		    Write-Line "Packing $($_.Path) -v $($_.SemVer20)"
 			    dotnet pack $_.Path --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-Line
-			}
-                				        
-        $apiKey = Read-Host "Please enter nuget API key"
+			}        
                 
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
             Write-H2 $_.FullName
-            $result = dotnet nuget push $_.FullName --source $NugetsSource --api-key $apiKey --no-symbols --force-english-output | out-string
+            $result = dotnet nuget push $_.FullName --source $NugetsSource --api-key $ApiKey --no-symbols --force-english-output | out-string
             
             if(-NOT($result -imatch 'Your package was pushed.')){
                 $allNugetsPushed = $false
