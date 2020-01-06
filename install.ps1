@@ -1,2 +1,0 @@
-Robocopy $PSScriptRoot "$([Environment]::GetFolderPath("MyDocuments"))\WindowsPowerShell\Modules\lib.release" *.psd1 *.psm1
-Robocopy $PSScriptRoot "$([Environment]::GetFolderPath("MyDocuments"))\PowerShell\Modules\lib.release" *.psd1 *.psm1
