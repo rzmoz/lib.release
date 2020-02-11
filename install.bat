@@ -1,1 +1,1 @@
-robocopy "." "%homepath%\Documents\PowerShellLib.Release" *.psd1 *.psm1 /NP
+robocopy "." "%homepath%\Documents\PowerShell\Lib.Release" *.psd1 *.psm1 /NP
