@@ -322,7 +322,7 @@ Function Test-Projects
 						
 			    $testResult | Write-Line
 
-			    if(-NOT ($testResult -imatch 'Test Run Successful.')){							
+			    if(-NOT ($testResult -imatch 'Passed!')){							
     			    $testsPassed = $false
                 }
                 
