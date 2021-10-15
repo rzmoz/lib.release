@@ -372,7 +372,7 @@ Function Publish-Nugets
                 
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
             Write-H2 $_.FullName
-            $result = dotnet nuget push $_.FullName --source $NugetsSource --api-key $ApiKey --no-symbols --force-english-output | out-string
+            $result = dotnet nuget push $_.FullName --source $NugetsSource --api-key $ApiKey --no-symbols --force-english-output --skip-duplicate | out-string
             
             if(-NOT($result -imatch 'Your package was pushed.')){
                 $allNugetsPushed = $false
