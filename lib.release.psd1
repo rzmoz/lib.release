@@ -15,7 +15,7 @@
     ModuleVersion = '2.0.0'
     
     # ID used to uniquely identify this module
-    GUID = '3eee95b8-6beb-48d1-b854-dea71798c333'
+    GUID = 'a4573e76-7bbb-4edb-8084-14224ece99bb'
     
     # Author of this module
     Author = 'rzmoz'
@@ -27,7 +27,7 @@
     Copyright = 'rzmoz. All rights reserved.'
     
     # Description of the functionality provided by this module
-    Description = 'Cmdlets for JsonPatch and XDT config transform.'
+    Description = 'Cmdlets for releasing libs.'
     
     # Minimum version of the Windows PowerShell engine required by this module
     PowerShellVersion = '6.0'
@@ -69,9 +69,7 @@
     # FunctionsToExport = @()
     
     # Cmdlets to export from this module
-    CmdletsToExport = 'Patch-Json',
-                      'Patch-Xml',
-                      'Patch-Directory'
+    CmdletsToExport = 'New-Lib.Release'
     
     # Variables to export from this module
     # VariablesToExport = @()
