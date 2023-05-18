@@ -358,32 +358,31 @@ Function Publish-Nugets
         [String]$ApiKey
     )
 
-    Begin {
-        $allNugetsPushed = $true
+    Begin {        
     }
     
     Process {
 
         #create nugets and place in output Dir dir
+        
         $Projects.Values | % {
-		    Write-Line "Packing $($_.Path) -v $($_.SemVer20)"
-			    dotnet pack $_.Path --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-Line
-			}        
+		    $packageId = $_["name"]
+            Write-H2 "Packing $($packageId) -v $($_.SemVer20)"
+            Write-Line "From $($_.Path)"
+			dotnet pack $_.Path -p:PackageID=$packageId --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-Line
+		}        
                 
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
             Write-H2 $_.FullName
             $result = dotnet nuget push $_.FullName --source $NugetsSource --api-key $ApiKey --no-symbols --force-english-output --skip-duplicate | out-string
             
-            if(-NOT($result -imatch 'Your package was pushed.')){
-                $allNugetsPushed = $false
+            if(-NOT($result -imatch 'Your package was pushed.')){                
                 Write-Problem $result
             }
-        }
-        
+        }         
     }
 
-    End {
-        return $allNugetsPushed
+    End {        
     }
 }
 
