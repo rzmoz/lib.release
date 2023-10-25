@@ -1,39 +1,38 @@
-Function New-Lib.Release
-{
+Function New-Lib.Release {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true)]
+        [Parameter(Position = 0, Mandatory = $true)]
         [string]$SolutionName,
-        [Parameter(Position=1)]
+        [Parameter(Position = 1)]
         [string]$nugetApiKey,
         [switch]$NoNugets = $false,
         [switch]$NoTests = $false,        
         [string]$LibRootDir = "c:\projects"
     )
 
-    Begin{
+    Begin {
         $currentDir = (Get-Location).Path
         Write-H1 "Initializing $($SolutionName) for release"
         $solutionDir = [System.IO.Path]::Combine($LibRootDir, $SolutionName).TrimEnd('\')
     }
 
     Process {
-        if((Enter-Dir $solutionDir)) {
+        if ((Enter-Dir $solutionDir)) {
             $SolutionName = $SolutionName.TrimStart(".").TrimStart("\\").TrimEnd("\\")
             $conf = Initialize-Lib.Release.Configuration $SolutionName -LibRootDir $LibRootDir
 
             $conf | Write-Lib.Release.Configuration
 
-            if($conf.InitSuccess -ne $true){
+            if ($conf.InitSuccess -ne $true) {
                 Write-Error "Aborting..."
                 return
             }     
             
-            try{
-#get nuget api key
-if(-NOT($nugetApiKey)){
-    $nugetApiKey = Read-Host "Please enter nuget API key"
-}
+            try {
+                #get nuget api key
+                if (-NOT($nugetApiKey)) {
+                    $nugetApiKey = Read-Host "Please enter nuget API key"
+                }
                 
 
                 ######### Initialize Git Dir #########
@@ -42,13 +41,14 @@ if(-NOT($nugetApiKey)){
                 $gitGoodToGoNeedle = 'nothing to commit, working tree clean'
                 $gitStatus = git status | Out-String
                 Write-Line $gitStatus
-		        if($gitStatus -imatch $gitGoodToGoNeedle){
+                if ($gitStatus -imatch $gitGoodToGoNeedle) {
                     Write-Host "Cleaning bin dirs:"
                     Get-ChildItem "$solutionDir" -Filter "bin" -recurse | ForEach-Object {
                         Write-Host "Cleaning: $($_.FullName)" -ForegroundColor DarkGray
                         Remove-Item "$($_.FullName)/*" -Recurse -Force
                     }
-    		    } else {
+                }
+                else {
                     Write-Problem "Git dir contains uncommitted changes and is not ready for release! Expected '$($gitGoodToGoNeedle)'. Aborting..."
                     return
                 }     
@@ -61,17 +61,18 @@ if(-NOT($nugetApiKey)){
                 Write-H1 "Building $($conf.Solution.Path)"
                 $buildOutput = dotnet build $conf.Solution.Path --configuration $conf.Build.Configuration --no-incremental --verbosity quiet | Out-String
                 Write-Line $buildOutput
-                if(-NOT($buildOutput -imatch "Build succeeded")) {
+                if (-NOT($buildOutput -imatch "Build succeeded")) {
                     Write-Problem "Build failed"
                     return
                 }
                 
                 #tests
-                if($NoTests) {
+                if ($NoTests) {
                     Write-Warning "Skipping tests. -NoTests flag set"
-                } else {
+                }
+                else {
                     Write-H1 "Testing $($conf.Build.Configuration)"
-                    if(-NOT($conf.Tests | Test-Projects -BuildConfiguration $conf.Build.Configuration)){
+                    if (-NOT($conf.Tests | Test-Projects -BuildConfiguration $conf.Build.Configuration)) {
                         return
                     }
                 }
@@ -79,37 +80,40 @@ if(-NOT($nugetApiKey)){
                 #nugets
                 #clean output dir if exists
                 Write-H1  "Cleaning OutPut dir: $($conf.Nugets.ArtifactsDir)"
-                if(Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)\*" -Force | Out-String | Write-Line }
+                if (Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)\*" -Force | Out-String | Write-Line }
                 
                 #create aritfacts dir
                 New-Item $conf.Nugets.ArtifactsDir -ItemType Directory -Force | Out-String | Write-Line
 
-                if($NoNugets){
+                if ($NoNugets) {
                     Write-Warning "Skipping nugets. -NoNugets flag set"
-                } else {
+                }
+                else {
                     Write-H1 "Packaging Nugets"
                     $conf.Releases | Publish-Nugets -NugetsOutputDir $conf.Nugets.ArtifactsDir -NugetsSource $conf.Nugets.Source -Buildconfiguration $conf.Build.Configuration -ApiKey $nugetApiKey
                 }
 
-            } finally {
+            }
+            finally {
                 Write-H1 "Cleaning up..."
 
                 #clean output Dir if exists
-                if(Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)\*" -Force | Write-Line}
-		        if(Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)" -Force | Write-Line }
+                if (Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)\*" -Force | Write-Line }
+                if (Test-Path $conf.Nugets.ArtifactsDir) { Remove-Item "$($conf.Nugets.ArtifactsDir)" -Force | Write-Line }
 
-		        #revert project version
+                #revert project version
                 $conf.Releases.Values | ForEach-Object { $_.Path } | Undo-ProjectVersion
             }
 
-        } else {
+        }
+        else {
             Write-Problem "Solution dir not found. Aborting..."
             return
         }
     }
-    End{
+    End {
         #bugging out!
-        if($currentDir -ne (Get-Location).Path){
+        if ($currentDir -ne (Get-Location).Path) {
             Enter-Dir $currentDir | Out-Null
         }        
     }
@@ -118,18 +122,17 @@ if(-NOT($nugetApiKey)){
 ########################################################################
 #                             Configuration                            #
 ########################################################################
-Function Initialize-Lib.Release.Configuration
-{
-	[CmdletBinding()]
+Function Initialize-Lib.Release.Configuration {
+    [CmdletBinding()]
     Param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$SolutionName,      
-        [Parameter(Mandatory=$false)]
-        [string]$BuildConfiguration ='release',
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $false)]
+        [string]$BuildConfiguration = 'release',
+        [Parameter(Mandatory = $true)]
         [string]$LibRootDir
     )
-	PROCESS {
+    PROCESS {
         [HashTable]$conf = @{}
         $conf.InitSuccess = $true
 
@@ -153,18 +156,18 @@ Function Initialize-Lib.Release.Configuration
         $libReleaseParams = Get-Content -Raw -Path "$($(Get-Location).Path)\lib.release.json" | ConvertFrom-Json
         
         $libReleaseParams.releases.GetEnumerator() | ForEach-Object {
-                $release = @{}
-                $release.Name = $_.name
-                $release.Version = $_.version
-                $release.PreRelease = $_.prerelease
-                $release.Path = $(Get-ChildItem -Path "." -Recurse -Depth 1 -Filter "*$($_.name).csproj").FullName
+            $release = @{}
+            $release.Name = $_.name
+            $release.Version = $_.version
+            $release.PreRelease = $_.prerelease
+            $release.Path = $(Get-ChildItem -Path "." -Recurse -Depth 1 -Filter "*$($_.name).csproj").FullName
 
-                if(-NOT ([String]::IsNullOrEmpty($release.PreRelease))){
-                    $release.PreRelease  = "-$($release.PreRelease )"
-                }
-                $release.SemVer20 = "$($release.Version)$($release.PreRelease)+$($conf.Git.ShortHash)"
-                $conf.Releases.Add($_.Name.ToLower(), $release)
+            if (-NOT ([String]::IsNullOrEmpty($release.PreRelease))) {
+                $release.PreRelease = "-$($release.PreRelease )"
             }
+            $release.SemVer20 = "$($release.Version)$($release.PreRelease)+$($conf.Git.ShortHash)"
+            $conf.Releases.Add($_.Name.ToLower(), $release)
+        }
         #----- tests -----#
         [HashTable]$conf.Tests = @{}
 
@@ -172,7 +175,7 @@ Function Initialize-Lib.Release.Configuration
             $testInfo = @{}
             $testInfo.Name = $_
             $testInfo.Path = $(Get-ChildItem -Path "." -Recurse -Depth 1 -Filter "*$($_).csproj").FullName
-            $conf.Tests.Add($testInfo.Name,$testInfo)
+            $conf.Tests.Add($testInfo.Name, $testInfo)
         }
 
         #----- nuget -----#
@@ -183,18 +186,17 @@ Function Initialize-Lib.Release.Configuration
         return $conf
     }
 }
-Function Write-Lib.Release.Configuration
-{
+Function Write-Lib.Release.Configuration {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [HashTable]$conf,
-        [Parameter(Position=1)]
+        [Parameter(Position = 1)]
         [Int]$level = 0
     )
 
     Begin {
-        if($level -eq 0) {
+        if ($level -eq 0) {
             Write-H2 "[Configuration]"
         }
 
@@ -203,15 +205,16 @@ Function Write-Lib.Release.Configuration
 
     Process {
         $spacer = ""
-        for($i=0; $i -lt $level; $i++){
+        for ($i = 0; $i -lt $level; $i++) {
             $spacer += "  "
         }
         
         $conf.GetEnumerator() | ForEach-Object {
-            if($_.Value -eq $null){
+            if ($_.Value -eq $null) {
                 Write-Line "$($spacer)$($_.Key) : null"
                 
-            } elseif(($_.Value.GetType().fullname) -eq "System.Collections.HashTable"){
+            }
+            elseif (($_.Value.GetType().fullname) -eq "System.Collections.HashTable") {
                 Write-H2 "$($spacer)[$($_.Key)]"
                 Write-Lib.Release.Configuration $_.Value $level
             }
@@ -225,67 +228,65 @@ Function Write-Lib.Release.Configuration
 ########################################################################
 #                            Project Version                           #
 ########################################################################
-Function Update-ProjectVersion
-{
-	[CmdletBinding()]
+Function Update-ProjectVersion {
+    [CmdletBinding()]
     Param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$Path,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$SemVer10,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$SemVer20
     )
   
-	Process {
+    Process {
         Write-H2 "Patching $Path"
         $TmpFile = $Path + ".tmp"
 
         #backup file for reverting later
         Copy-Item $Path $TmpFile
 
-	    #load project xml
-	    [xml]$xml = Get-Content -Path $Path
+        #load project xml
+        [xml]$xml = Get-Content -Path $Path
 
-	    #ensure version nodes exist
-	    $propertyGroupNode = $xml.SelectSingleNode("//Project/PropertyGroup")
-	    if ($propertyGroupNode -eq $null) {
-    		Write-Problem "csproj format not recognized. Is this a valid VS 17 project file?"
-		    return
-	    }
+        #ensure version nodes exist
+        $propertyGroupNode = $xml.SelectSingleNode("//Project/PropertyGroup")
+        if ($propertyGroupNode -eq $null) {
+            Write-Problem "csproj format not recognized. Is this a valid VS 17 project file?"
+            return
+        }
 
         #assert node exists
         @( "Version", "AssemblyVersion", "FileVersion") | % {
             if ($propertyGroupNode.SelectSingleNode("//$($_)") -eq $null) {
-    		    $propertyGroupNode.AppendChild($xml.CreateElement($_)) | Out-Null
+                $propertyGroupNode.AppendChild($xml.CreateElement($_)) | Out-Null
             }
             
             $propertyGroupNode.SelectSingleNode("//$($_)").InnerText = $SemVer10
             
-            if($_ -eq "Version"){
+            if ($_ -eq "Version") {
                 $propertyGroupNode.SelectSingleNode("//$($_)").InnerText = $SemVer20
             }
 
             Write-Line "  $($_): $($propertyGroupNode.SelectSingleNode("//$($_)").InnerText)"
         }
                 
-    	#write to project file
+        #write to project file
         $xml.Save($Path)	
-	}
+    }
 }
-Function Undo-ProjectVersion
-{
-	[CmdletBinding()]
-	Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
+Function Undo-ProjectVersion {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true)]
         [String]$Path
-        )
+    )
 
-    Process{
+    Process {
         $Path | % { 
             $TmpFile = $_ + ".tmp"
             Write-Line "Reverting $TmpFile"
-            if(Test-Path($TmpFile)){
+            if (Test-Path($TmpFile)) {
                 Move-Item $TmpFile $_ -Force
             }        
         }
@@ -295,13 +296,12 @@ Function Undo-ProjectVersion
 ########################################################################
 #                                Tests                                 #
 ########################################################################
-Function Test-Projects
-{
+Function Test-Projects {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [HashTable]$TestProjects,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [String]$Buildconfiguration
     )
 
@@ -314,24 +314,24 @@ Function Test-Projects
 
             Write-H2 "Testing $($_.key)"
 
-            if(-NOT(Test-Path($_.value.Path))) {
-               Write-Error  "$($_.value.Name) not found!"
-            } else {
+            if (-NOT(Test-Path($_.value.Path))) {
+                Write-Error  "$($_.value.Name) not found!"
+            }
+            else {
                 Write-Line "Testing $($_.value.Path)"
                 $testResult = dotnet test $_.value.Path --configuration $Buildconfiguration --no-build | Out-String
 						
-			    $testResult | Write-Line
+                $testResult | Write-Line
 
-			    if(-NOT ($testResult -imatch 'Passed!')){							
-    			    $testsPassed = $false
-                }
-                
+                if (-NOT ($testResult -imatch 'Passed!')) {							
+                    $testsPassed = $false
+                }                
             }            
         }        
     }
 
     End {
-        if(-NOT($testsPassed)){
+        if (-NOT($testsPassed)) {
             Write-Host "Tests failed!" -ForegroundColor Red -BackgroundColor Black
         }
         return $testsPassed
@@ -342,19 +342,18 @@ Function Test-Projects
 ########################################################################
 #                                Nugets                                #
 ########################################################################
-Function Publish-Nugets
-{
+Function Publish-Nugets {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [HashTable]$Projects,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [String]$NugetsOutputDir,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [String]$NugetsSource,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [String]$Buildconfiguration,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [String]$ApiKey
     )
 
@@ -366,17 +365,17 @@ Function Publish-Nugets
         #create nugets and place in output Dir dir
         
         $Projects.Values | % {
-		    $packageId = $_["name"]
+            $packageId = $_["name"]
             Write-H2 "Packing $($packageId) -v $($_.SemVer20)"
             Write-Line "From $($_.Path)"
-			dotnet pack $_.Path -p:PackageID=$packageId --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-Line
-		}        
+            dotnet pack $_.Path -p:PackageID=$packageId --configuration $BuildConfiguration --no-build --output $NugetsOutputDir | Out-String | Write-Line
+        }        
                 
         Get-ChildItem $NugetsOutputDir -Filter "*.nupkg" | % { 
             Write-H2 $_.FullName
             $result = dotnet nuget push $_.FullName --source $NugetsSource --api-key $ApiKey --no-symbols --force-english-output --skip-duplicate | out-string
             
-            if(-NOT($result -imatch 'Your package was pushed.')){                
+            if (-NOT($result -imatch 'Your package was pushed.')) {                
                 Write-Problem $result
             }
         }         
@@ -389,39 +388,39 @@ Function Publish-Nugets
 ########################################################################
 #                             PS Foundation                            #
 ########################################################################
-Function Test-PathVerbose
-{
+Function Test-PathVerbose {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true)]
         [String]$Path
     )
     PROCESS {
         Write-Line "Asserting path: $($Path) -> " -NoNewLine
 
-        if(Test-Path $Path){
+        if (Test-Path $Path) {
             Write-Line "Found!"
             return $true
-        } else {
+        }
+        else {
             Write-Problem "Not Found!"
             return $false
         }
     }
 }
-Function Enter-Dir
-{
+Function Enter-Dir {
     [CmdletBinding()]
     Param (                
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true)]
         [String]$Path
     )
     PROCESS {
         
-        if(Test-Path $Path){
+        if (Test-Path $Path) {
             Write-Line "Entered: $($Path) From $((Get-Location).Path)"
             Set-Location $Path            
             return $true
-        } else {
+        }
+        else {
             Write-Warning "Dir not found: $($Path)"
             return $false
         }
@@ -431,55 +430,50 @@ Function Enter-Dir
 ########################################################################
 #                                 Write                                #
 ########################################################################
-Function Write-H1
-{
+Function Write-H1 {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [String]$message
     )
     Process {        
         Write-Host $message -ForegroundColor Cyan
     }
 }
-Function Write-H2
-{
+Function Write-H2 {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [String]$message
     )
     Process {        
         Write-Host $message -ForegroundColor Gray
     }
 }
-Function Write-Warning
-{
+Function Write-Warning {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [String]$message
     )
     Process {        
         Write-Host $message -ForegroundColor Yellow -BackgroundColor Black
     }
 }
-Function Write-Problem
-{
+Function Write-Problem {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [String]$message
     )
     Process {        
         Write-Host $message -ForegroundColor Red -BackgroundColor Black
     }
 }
-Function Write-Line
-{
+Function Write-Line {
     [CmdletBinding()]
     Param (
-        [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [String]$message,
         [Switch]$NoNewLine
     )
