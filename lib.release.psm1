@@ -7,7 +7,7 @@ Function New-Lib.Release {
         [string]$nugetApiKey,
         [switch]$NoNugets = $false,
         [switch]$NoTests = $false,        
-        [string]$LibRootDir = "c:\projects"
+        [string]$LibRootDir = "d:\projects"
     )
 
     Begin {
