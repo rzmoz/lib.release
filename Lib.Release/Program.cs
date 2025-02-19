@@ -7,9 +7,8 @@ namespace Lib.Release
     {
         static async Task<int> Main(string[] args)
         {
-            var app = new LoogConsoleBuilder(args)
-                .Services(services => services.AddPipelines())
-
+            await using var app = new CliHostBuilder(args)
+                .WithServices(services => services.AddPipelines().AddPipelineSteps())
                 .Build();
 
             return await app.RunPipelineAsync<ReleasePipeline>();
