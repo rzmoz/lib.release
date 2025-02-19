@@ -1,5 +1,4 @@
-﻿
-using DotNet.Basics.Sys;
+﻿using DotNet.Basics.Sys;
 
 namespace Lib.Release
 {
@@ -7,6 +6,6 @@ namespace Lib.Release
     {
         public DirPath? LibRootDir { get; set; }
         public string? PublishKey { get; set; }
-        public List<LibReleaseInfo> Releases { get; } = new();
+        public List<LibReleaseInfo> ReleaseInfos { get; } = new();
     }
 }

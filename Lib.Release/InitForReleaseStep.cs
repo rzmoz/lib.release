@@ -3,12 +3,15 @@ using DotNet.Basics.IO;
 using DotNet.Basics.Pipelines;
 using DotNet.Basics.Serilog.Looging;
 using DotNet.Basics.Sys;
+using DotNet.Basics.Sys.Text;
 using LibGit2Sharp;
 
 namespace Lib.Release
 {
     public class InitForReleaseStep(ILoog log) : PipelineStep<LibReleasePipelineArgs>
     {
+        private const string _libReleaseInfoFileName = "lib.release.json";
+
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
             //assert git status
@@ -56,6 +59,12 @@ namespace Lib.Release
 
         private int InitReleaseInfo(LibReleasePipelineArgs args)
         {
+            var libInfoFile = args.LibRootDir.GetFiles(_libReleaseInfoFileName, SearchOption.AllDirectories).FirstOrDefault();
+            if (libInfoFile == null)
+                throw new FileNotFoundException(_libReleaseInfoFileName);
+
+            args.ReleaseInfos.Add(libInfoFile.ReadAllText().FromJson<LibReleaseInfo>());
+            log.Verbose($"{nameof(args.ReleaseInfos)}:{args.ReleaseInfos.Single().ToJson(true)}");
             return 0;
         }
     }

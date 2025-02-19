@@ -1,10 +1,9 @@
-﻿using DotNet.Basics.Sys;
-
-namespace Lib.Release
+﻿namespace Lib.Release
 {
     public class LibReleaseInfo
     {
-        public string Name { get; set; } = string.Empty;
-        public SemVersion Version { get; set; } = "0.0.1";
+        public string Source { get; set; } = "https://api.nuget.org/v3/index.json";
+        public List<ReleaseInfo> Releases { get; set; } = new();
+        public IReadOnlyList<string> Tests { get; set; } = [];
     }
 }
