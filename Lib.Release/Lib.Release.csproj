@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PackAsTool>true</PackAsTool>
+		<ToolCommandName>lib.release</ToolCommandName>
+		<PackageOutputPath>./bin/nupkg</PackageOutputPath>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="DotNet.Basics" Version="11.5.0" />
+		<PackageReference Include="DotNet.Basics.Cli" Version="11.5.7" />
+		<PackageReference Include="DotNet.Basics.Pipelines" Version="11.5.2" />
+		<PackageReference Include="DotNet.Basics.Serilog" Version="4.4.5" />
+		<PackageReference Include="LibGit2Sharp" Version="0.31.0" />
+	</ItemGroup>
+
+</Project>

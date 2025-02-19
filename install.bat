@@ -1,1 +1,0 @@
-robocopy "C:\Projects\lib.release" "C:\Users\rr\Documents\PowerShell\Modules\Lib.Release" *.psd1 *.psm1 /NP
