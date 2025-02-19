@@ -12,9 +12,9 @@
 
 	<ItemGroup>
 		<PackageReference Include="DotNet.Basics" Version="11.5.0" />
-		<PackageReference Include="DotNet.Basics.Cli" Version="11.6.2" />
+		<PackageReference Include="DotNet.Basics.Cli" Version="11.6.4" />
 		<PackageReference Include="DotNet.Basics.Pipelines" Version="11.6.1" />
-		<PackageReference Include="DotNet.Basics.Serilog" Version="4.6.0" />
+		<PackageReference Include="DotNet.Basics.Serilog" Version="4.6.1" />
 		<PackageReference Include="LibGit2Sharp" Version="0.31.0" />
 	</ItemGroup>
 
