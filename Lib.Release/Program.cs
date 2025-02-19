@@ -8,7 +8,10 @@ namespace Lib.Release
         static async Task<int> Main(string[] args)
         {
             await using var app = new CliHostBuilder(args)
-                .WithServices(services => services.AddPipelines().AddPipelineSteps())
+                .WithServices(services =>
+                {
+                    services.AddPipelines();
+                })
                 .Build();
 
             return await app.RunPipelineAsync<ReleasePipeline>();
