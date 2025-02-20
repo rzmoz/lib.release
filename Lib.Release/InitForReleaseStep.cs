@@ -63,8 +63,8 @@ namespace Lib.Release
             if (libInfoFile == null)
                 throw new FileNotFoundException(_libReleaseInfoFileName);
 
-            args.ReleaseInfos.Add(libInfoFile.ReadAllText().FromJson<LibReleaseInfo>());
-            log.Verbose($"{nameof(args.ReleaseInfos)}:{args.ReleaseInfos.Single().ToJson(true)}");
+            args.ReleaseInfo = libInfoFile.ReadAllText().FromJson<LibReleaseInfo>();
+            log.Verbose($"{nameof(args.ReleaseInfo)}:{args.ReleaseInfo.ToJson(true)}");
             return 0;
         }
     }

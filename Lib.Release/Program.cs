@@ -1,5 +1,6 @@
 ﻿using DotNet.Basics.Cli;
 using DotNet.Basics.Pipelines;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Lib.Release
 {
@@ -11,6 +12,7 @@ namespace Lib.Release
                 .WithServices(services =>
                 {
                     services.AddPipelines();
+                    services.AddSingleton<Nuget>();
                 })
                 .Build();
 

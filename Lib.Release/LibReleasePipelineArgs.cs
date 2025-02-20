@@ -6,6 +6,6 @@ namespace Lib.Release
     {
         public DirPath? LibRootDir { get; set; }
         public string? PublishKey { get; set; }
-        public List<LibReleaseInfo> ReleaseInfos { get; } = new();
+        public LibReleaseInfo ReleaseInfo { get; set; } = new();
     }
 }
