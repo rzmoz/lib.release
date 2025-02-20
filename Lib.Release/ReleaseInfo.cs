@@ -1,4 +1,5 @@
-﻿using DotNet.Basics.Sys;
+﻿using DotNet.Basics.IO;
+using DotNet.Basics.Sys;
 
 namespace Lib.Release
 {
@@ -9,6 +10,8 @@ namespace Lib.Release
         public string PreRelease { get; set; } = string.Empty;
         public FilePath? ProjectFile { get; set; }
         public FilePath? TempProjectFile => ProjectFile?.Directory.ToFile($"{ProjectFile.Name}.tmp");
+        public DirPath? PackDir => ProjectFile?.Directory.Add("bin/.nuget");
+
         public SemVersion GetSemVer() => $"{Version}{(PreRelease.Any() ? $"+{PreRelease}" : "")}";
 
         public static implicit operator ReleaseInfo(string name)

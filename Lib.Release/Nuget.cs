@@ -1,5 +1,4 @@
-﻿using System.Text;
-using DotNet.Basics.IO;
+﻿using DotNet.Basics.IO;
 using DotNet.Basics.Serilog.Looging;
 using DotNet.Basics.Sys;
 using DotNet.Basics.Sys.Text;
@@ -38,21 +37,14 @@ namespace Lib.Release
             var sourcesString = sources.Select(s => $@"-Source ""{s}""").JoinString(" ");
             var searchCmd = @$"{_nugetFilePath.FullName} search ""{packageName}"" -NonInteractive {(preRelease ? "-PreRelease " : "")}{sourcesString}";
             log.Verbose(searchCmd);
-            var info = new StringBuilder();
-            var error = new StringBuilder();
-            var debug = new StringBuilder();
-            CmdPrompt.Run(searchCmd, i => info.AppendLine(i), e => error.AppendLine(e), d => debug.AppendLine(d));
+            var cmdLogger = new CmdPromptLogger();
+            cmdLogger.DebugLogged += log.Debug;
+            cmdLogger.InfoLogged += log.Debug;
+            cmdLogger.ErrorLogged += log.Error;
+            if (CmdPrompt.Run(searchCmd, cmdLogger) != 0 || cmdLogger.HasErrors)
+                throw new ApplicationException($"Failed to get nuget info for {packageName}. See log for details.");
 
-            var infoStr = info.ToString();
-
-            if (debug.Length > 0)
-                log.Debug(debug.ToString());
-            if (infoStr.Any())
-                log.Debug(infoStr);
-            if (error.Length > 0)
-                log.Error(error.ToString());
-
-            var pkgMatches = _nugetPackageRegex.Matches(infoStr);
+            var pkgMatches = _nugetPackageRegex.Matches(cmdLogger.Info.ToString());
 
             return pkgMatches.Select(m =>
             {
