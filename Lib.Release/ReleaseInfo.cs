@@ -8,6 +8,8 @@ namespace Lib.Release
         public string Version { get; set; } = string.Empty;
         public string PreRelease { get; set; } = string.Empty;
         public FilePath? ProjectFile { get; set; }
+        public FilePath? TempProjectFile => ProjectFile?.Directory.ToFile($"{ProjectFile.Name}.tmp");
+        public SemVersion GetSemVer() => $"{Version}{(PreRelease.Any() ? $"+{PreRelease}" : "")}";
 
         public static implicit operator ReleaseInfo(string name)
         {

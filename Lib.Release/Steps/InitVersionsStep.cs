@@ -4,7 +4,7 @@ using DotNet.Basics.Serilog.Looging;
 using DotNet.Basics.Sys;
 using DotNet.Basics.Sys.Text;
 
-namespace Lib.Release
+namespace Lib.Release.Steps
 {
     public class InitVersionsStep(ILoog log, Nuget nuget) : PipelineStep<LibReleasePipelineArgs>
     {
