@@ -6,7 +6,7 @@ using DotNet.Basics.Sys;
 using DotNet.Basics.Sys.Text;
 using LibGit2Sharp;
 
-namespace Lib.Release
+namespace Lib.Release.Steps
 {
     public class InitForReleaseStep(ILoog log) : PipelineStep<LibReleasePipelineArgs>
     {
@@ -28,7 +28,7 @@ namespace Lib.Release
 
         private int AssertGitStatus(LibReleasePipelineArgs args)
         {
-            using var repo = new Repository(args.LibRootDir);
+            using var repo = new Repository(args.LibRootDir!);
             var status = repo.RetrieveStatus(new StatusOptions
             {
                 ExcludeSubmodules = true,
@@ -51,7 +51,7 @@ namespace Lib.Release
 
         private void CleanBinDirs(LibReleasePipelineArgs args)
         {
-            var binDirs = args.LibRootDir.GetDirectories(_outputDirName, SearchOption.AllDirectories);
+            var binDirs = args.LibRootDir!.GetDirectories(_outputDirName, SearchOption.AllDirectories);
             log.Debug($"Cleaning {_outputDirName} dirs");
             binDirs.ForEach(d => log.Verbose(d.FullName));
             binDirs.ForEach(d => d.DeleteIfExists());
@@ -59,11 +59,11 @@ namespace Lib.Release
 
         private int InitReleaseInfo(LibReleasePipelineArgs args)
         {
-            var libInfoFile = args.LibRootDir.GetFiles(_libReleaseInfoFileName, SearchOption.AllDirectories).FirstOrDefault();
+            var libInfoFile = args.LibRootDir!.GetFiles(_libReleaseInfoFileName, SearchOption.AllDirectories).FirstOrDefault();
             if (libInfoFile == null)
                 throw new FileNotFoundException(_libReleaseInfoFileName);
 
-            args.ReleaseInfo = libInfoFile.ReadAllText().FromJson<LibReleaseInfo>();
+            args.ReleaseInfo = libInfoFile.ReadAllText()!.FromJson<LibReleaseInfo>();
             log.Verbose($"{nameof(args.ReleaseInfo)}:{args.ReleaseInfo.ToJson(true)}");
             return 0;
         }

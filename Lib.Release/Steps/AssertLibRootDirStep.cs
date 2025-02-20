@@ -3,11 +3,11 @@ using DotNet.Basics.Pipelines;
 using DotNet.Basics.Serilog.Looging;
 using DotNet.Basics.Sys;
 
-namespace Lib.Release
+namespace Lib.Release.Steps
 {
     public class AssertLibRootDirStep(ILoog log) : PipelineStep<LibReleasePipelineArgs>
     {
-        private static readonly DirPath _fallbackProjectsDirName = @"c:\projects";
+        private static readonly DirPath _fallbackProjectsDirName = @"C:\Projects";
 
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {

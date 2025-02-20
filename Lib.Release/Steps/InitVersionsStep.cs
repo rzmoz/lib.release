@@ -11,7 +11,7 @@ namespace Lib.Release
         protected override async Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
             await nuget.InitAsync();
-            var pkgs = (await args.ReleaseInfo.Releases.ForEachParallelAsync(async r => nuget.Search(r.Name))).SelectMany(p => p).Distinct().ToDictionary(p => p.Name);
+            var pkgs = args.ReleaseInfo.Releases.ForEachParallel(r => nuget.Search(r.Name)).SelectMany(p => p).Distinct().ToDictionary(p => p.Name);
 
             var candidates = args.ReleaseInfo.Releases.ToList();
 

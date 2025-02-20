@@ -1,11 +1,13 @@
-﻿namespace Lib.Release
+﻿using DotNet.Basics.Sys;
+
+namespace Lib.Release
 {
     public class ReleaseInfo
     {
         public string Name { get; set; } = string.Empty;
         public string Version { get; set; } = string.Empty;
         public string PreRelease { get; set; } = string.Empty;
-
+        public FilePath? ProjectFile { get; set; }
 
         public static implicit operator ReleaseInfo(string name)
         {
@@ -14,7 +16,7 @@
                 Name = name
             };
         }
-        
+
         protected bool Equals(ReleaseInfo other)
         {
             return Name.Equals(other.Name, StringComparison.OrdinalIgnoreCase);
@@ -35,7 +37,7 @@
 
         public override string ToString()
         {
-            return $"{Name}: {Version}{(PreRelease.Any()?$"+{PreRelease}":"")}";
+            return $"{Name}: {Version}{(PreRelease.Any() ? $"+{PreRelease}" : "")}";
         }
     }
 }
