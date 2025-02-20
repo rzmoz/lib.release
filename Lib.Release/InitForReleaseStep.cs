@@ -11,10 +11,10 @@ namespace Lib.Release
     public class InitForReleaseStep(ILoog log) : PipelineStep<LibReleasePipelineArgs>
     {
         private const string _libReleaseInfoFileName = "lib.release.json";
-
+        private const string _outputDirName = ".nupkg";
+        
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
-        {
-            //assert git status
+        {   //assert git status
             var gitStatus = AssertGitStatus(args);
             if (gitStatus != 0)
                 return Task.FromResult(gitStatus);
@@ -51,8 +51,8 @@ namespace Lib.Release
 
         private void CleanBinDirs(LibReleasePipelineArgs args)
         {
-            var binDirs = args.LibRootDir.GetDirectories("bin", SearchOption.AllDirectories);
-            log.Debug("Cleaning bin dirs");
+            var binDirs = args.LibRootDir.GetDirectories(_outputDirName, SearchOption.AllDirectories);
+            log.Debug($"Cleaning {_outputDirName} dirs");
             binDirs.ForEach(d => log.Verbose(d.FullName));
             binDirs.ForEach(d => d.DeleteIfExists());
         }
