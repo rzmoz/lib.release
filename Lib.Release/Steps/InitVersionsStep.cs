@@ -20,7 +20,7 @@ namespace Lib.Release.Steps
             {
                 if (pkgs.TryGetValue(candidate.Name, out var latestPkg))
                 {
-                    var comparisonVersion = SemVersion.Parse($"{candidate.Version}{(candidate.PreRelease.Any() ? $"+{candidate.PreRelease}" : "")}");
+                    var comparisonVersion = new SemVersion(candidate.Version, candidate.PreRelease);
 
                     if (comparisonVersion.Equals(latestPkg.SemVersion))
                     {

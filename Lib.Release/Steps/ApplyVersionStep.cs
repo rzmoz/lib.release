@@ -55,7 +55,7 @@ namespace Lib.Release.Steps
 
                 vNode!.InnerText = name == _versionNodeName
                     ? r.GetSemVer().SemVer20String
-                    : r.GetSemVer().SemVer10String;
+                    : $"{r.GetSemVer().FileVerString}";
 
                 log.Debug($"{name} set to {vNode.InnerText} in {r.ProjectFile.Name}");
             }

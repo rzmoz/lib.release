@@ -12,7 +12,7 @@ namespace Lib.Release
         public FilePath? TempProjectFile => ProjectFile?.Directory.ToFile($"{ProjectFile.Name}.tmp");
         public DirPath? PackDir => ProjectFile?.Directory.Add("bin/.nuget");
 
-        public SemVersion GetSemVer() => $"{Version}{(PreRelease.Any() ? $"+{PreRelease}" : "")}";
+        public SemVersion GetSemVer() => new SemVersion(Version, PreRelease);
 
         public static implicit operator ReleaseInfo(string name)
         {
@@ -42,7 +42,7 @@ namespace Lib.Release
 
         public override string ToString()
         {
-            return $"{Name}: {Version}{(PreRelease.Any() ? $"+{PreRelease}" : "")}";
+            return $"{Name}: {GetSemVer().SemVer20String}";
         }
     }
 }
