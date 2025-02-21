@@ -29,7 +29,7 @@ namespace Lib.Release
             var version = _pkgVersionRegex.Match(html);
             if (string.IsNullOrEmpty(version))
                 version = _toolVersionRegex.Match(html);
-            log.Verbose($"{packageName.Highlight()} version resolved to: {version.Highlight()}");
+            log.Debug($"{packageName.Highlight()} version resolved to: {version.Highlight()}");
 
             return new NugetPackage
             {

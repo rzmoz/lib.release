@@ -12,7 +12,7 @@ namespace Lib.Release.Steps
     {
         private const string _libReleaseInfoFileName = "lib.release.json";
         private const string _outputDirName = ".nupkg";
-        
+
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {   //assert git status
             var gitStatus = AssertGitStatus(args);
@@ -38,11 +38,13 @@ namespace Lib.Release.Steps
             if (status.Any())//pending changes => no good to release
             {
                 log.Error($"There are {status.Count()} pending changes. Commit before release!");
-                foreach (var item in status)
-                {
-                    log.Debug($"{item.FilePath}:{item.State.ToName()}");
-                }
-
+                status.GroupBy(s => s.State)
+                    .ForEach(g =>
+                    {
+                        log.Verbose($"{g.Key.ToName().Highlight()}:");
+                        g.ForEach(s =>
+                            log.Verbose($"- {s.FilePath}".WithIndent(1)));
+                    });
                 return 400;
             }
 
@@ -64,7 +66,7 @@ namespace Lib.Release.Steps
                 throw new FileNotFoundException(_libReleaseInfoFileName);
 
             args.ReleaseInfo = libInfoFile.ReadAllText()!.FromJson<LibReleaseInfo>()!;
-            log.Verbose($"{nameof(args.ReleaseInfo)}:{args.ReleaseInfo.ToJson(true)}");
+            log.Debug($"{nameof(args.ReleaseInfo)}:{args.ReleaseInfo.ToJson(true)}");
             return 0;
         }
     }

@@ -25,7 +25,7 @@ namespace Lib.Release.Steps
 
                 if (info.Contains("Your package was pushed.", StringComparison.OrdinalIgnoreCase))
                 {
-                    _log.Success($"{r.ToString().Highlight()} was successfully released. See log for details.");
+                    _log.Success($"{r.ToString().Highlight()} successfully released.");
                     return 0;
                 }
                 if (info.Contains("Conflict", StringComparison.OrdinalIgnoreCase))
@@ -35,8 +35,6 @@ namespace Lib.Release.Steps
                 }
                 _log.Warning($"Error detected for {r.ToString().Highlight()}. See log for details.");
                 return 400;
-
-
             }).Sum());
         }
     }

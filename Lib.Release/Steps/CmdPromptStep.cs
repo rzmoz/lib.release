@@ -11,10 +11,9 @@ namespace Lib.Release.Steps
         protected CmdPromptLogger CmdRun(string cmd, out int exitCode)
         {
             var cmdLogger = new CmdPromptLogger();
-            cmdLogger.DebugLogged += Log.Debug;
-            cmdLogger.InfoLogged += Log.Debug;
+            cmdLogger.DebugLogged += Log.Verbose;
+            cmdLogger.InfoLogged += Log.Verbose;
             cmdLogger.ErrorLogged += Log.Error;
-
 
             exitCode = CmdPrompt.Run(cmd, cmdLogger);
 

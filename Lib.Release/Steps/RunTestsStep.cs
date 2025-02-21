@@ -20,7 +20,7 @@ namespace Lib.Release.Steps
                 {
                     var csprojFile = args.LibRootDir!.ToDir(testProjectName)!.GetFiles("*.csproj").Single();
                     var testCmd = @$"dotnet test ""{csprojFile.FullName}"" -c release";
-                    Log.Info($"Testing {csprojFile.FullName.Highlight()}");
+                    Log.Debug($"Testing {csprojFile.FullName.Highlight()}");
 
                     var logger = CmdRun(testCmd, out var exitCode);
                     if (exitCode != 0 || logger.HasErrors)
@@ -28,9 +28,8 @@ namespace Lib.Release.Steps
                 }
             }
             else
-            {
-                Log.Info("No tests configured. Skipping tests...");
-            }
+                Log.Warning("No tests configured. Skipping tests...");
+            
             return Task.FromResult(0);
         }
     }

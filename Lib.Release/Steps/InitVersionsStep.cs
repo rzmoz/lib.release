@@ -10,7 +10,7 @@ namespace Lib.Release.Steps
     {
         protected override async Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
-            var pkgs = (await args.ReleaseInfo.Releases
+            var packages = (await args.ReleaseInfo.Releases
                 .ForEachParallelAsync(async r => await nuget.SearchAsync(r.Name)))
                 .Select(p => p)
                 .Distinct()
@@ -18,30 +18,28 @@ namespace Lib.Release.Steps
 
             var candidates = args.ReleaseInfo.Releases.ToList();
 
-            log.Debug($"Resolving packages for release from:\r\n{candidates.ToJson(true)}");
+            log.Verbose($"Resolving packages for release from:\r\n{candidates.ToJson(true)}");
 
             foreach (var candidate in candidates)
             {
-                if (pkgs.TryGetValue(candidate.Name, out var latestPkg))
+                if (packages.TryGetValue(candidate.Name, out var latestPkg))
                 {
                     var comparisonVersion = new SemVersion(candidate.Version, candidate.PreRelease);
 
                     if (comparisonVersion.Equals(latestPkg.SemVersion))
                     {
                         args.ReleaseInfo.Releases.RemoveAt(args.ReleaseInfo.Releases.IndexOf(candidate.Name));
-                        log.Info($"{candidate} {"already exists".Highlight()}. Removing from release.");
+                        log.Warning($"{candidate} {"already exists".Highlight()}. Ignoring in release.");
                         continue;
                     }
                 }
-                log.Success($"{candidate.ToString().Highlight()} approved for release.");
-
+                log.Info($"{candidate.ToString().Highlight()} approved for release.");
             }
 
             if (args.ReleaseInfo.Releases.Any())
-            {
                 return 0;
-            }
-            log.Warning($"No release candidates. Aborting release");
+            
+            log.Error($"No release candidates. Aborting release");
             return 400;
         }
     }
