@@ -6,7 +6,8 @@ namespace Lib.Release
     //https://learn.microsoft.com/en-us/nuget/reference/nuget-exe-cli-reference?tabs=windows
     public class Nuget(ILoog log) : IDisposable
     {
-        private static readonly SysRegex _pkgVersionRegex = @"<span class=""install-command-row"">dotnet add package .+? --version (?<version>.+?)</span>";
+        private static readonly SysRegex _pkgVersionRegex = @"dotnet add package .+? --version (?<version>.+?)</span>";
+        private static readonly SysRegex _toolVersionRegex = @"dotnet tool install .+? --version (?<version>.+?)</span>";
         private static readonly HttpClient _client = new();
 
         private const string _nugetSearchBaseurl = "https://www.nuget.org/packages/";
@@ -25,9 +26,9 @@ namespace Lib.Release
                 };
 
             var html = await response.Content.ReadAsStringAsync();
-            log.Verbose(html);
             var version = _pkgVersionRegex.Match(html);
-
+            if (string.IsNullOrEmpty(version))
+                version = _toolVersionRegex.Match(html);
             log.Verbose($"{packageName.Highlight()} version resolved to: {version.Highlight()}");
 
             return new NugetPackage
