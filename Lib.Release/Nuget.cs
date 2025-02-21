@@ -1,6 +1,5 @@
 ﻿using System.Text.Json.Nodes;
 using DotNet.Basics.Serilog.Looging;
-using static System.Net.WebRequestMethods;
 
 namespace Lib.Release
 {

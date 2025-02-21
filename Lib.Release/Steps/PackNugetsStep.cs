@@ -1,10 +1,13 @@
-﻿using DotNet.Basics.Collections;
+﻿using DotNet.Basics.Cli;
+using DotNet.Basics.Collections;
 using DotNet.Basics.IO;
+using DotNet.Basics.Pipelines;
 using DotNet.Basics.Serilog.Looging;
+using DotNet.Basics.Win;
 
 namespace Lib.Release.Steps
 {
-    public class PackNugetsStep(ILoog log) : CmdPromptStep<LibReleasePipelineArgs>(log)
+    public class PackNugetsStep(ILoog log) : PipelineStep<LibReleasePipelineArgs>
     {
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
@@ -15,8 +18,7 @@ namespace Lib.Release.Steps
 
                 var packCmd = @$"dotnet pack ""{r.ProjectFile!.FullName}"" -c release --force -o ""{r.PackDir!.FullName}""";
 
-                var logger = CmdRun(packCmd, out var exitCode);
-                if (exitCode != 0 || logger.HasErrors)
+                if (CmdPrompt.Run(packCmd, log.WithPromptLogger()) != 0)
                     throw new ApplicationException($"Failed to pack {r.Name}. See log for details.");
             });
             return Task.FromResult(0);
