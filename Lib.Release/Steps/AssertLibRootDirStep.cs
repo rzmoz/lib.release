@@ -20,11 +20,11 @@ namespace Lib.Release.Steps
             args.LibRootDir = _fallbackProjectsDirName.ToDir(args.LibRootDir);
             if (args.LibRootDir.Exists())
             {
-                log.Debug($"Lib root dir found at {args.LibRootDir.FullName.Highlight()}");
+                log.Debug($"Lib root dir found at {args.LibRootDir!.FullName.Highlight()}");
                 return Task.FromResult(0);
             }
 
-            log.Fatal($"Lib root dir NOT found! {args.LibRootDir.FullName.Highlight()}");
+            log.Fatal($"Lib root dir NOT found! {args.LibRootDir!.FullName.Highlight()}");
             return Task.FromResult(400);
         }
     }

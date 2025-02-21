@@ -6,12 +6,14 @@ namespace Lib.Release.Steps
 {
     public abstract class CmdPromptStep<T>(ILoog log) : PipelineStep<T>
     {
+        protected ILoog Log { get; } = log;
+
         protected CmdPromptLogger CmdRun(string cmd, out int exitCode)
         {
             var cmdLogger = new CmdPromptLogger();
-            cmdLogger.DebugLogged += log.Debug;
-            cmdLogger.InfoLogged += log.Debug;
-            cmdLogger.ErrorLogged += log.Error;
+            cmdLogger.DebugLogged += Log.Debug;
+            cmdLogger.InfoLogged += Log.Debug;
+            cmdLogger.ErrorLogged += Log.Error;
 
 
             exitCode = CmdPrompt.Run(cmd, cmdLogger);

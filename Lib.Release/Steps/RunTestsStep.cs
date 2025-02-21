@@ -6,13 +6,11 @@ namespace Lib.Release.Steps
 {
     public class RunTestsStep(ILoog log) : CmdPromptStep<LibReleasePipelineArgs>(log)
     {
-        private readonly ILoog _log = log;
-
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
             if (args.SkipTests)
             {
-                _log.Info("Skipping tests");
+                Log.Info("Skipping tests");
                 return Task.FromResult(0);
             }
 
@@ -20,9 +18,9 @@ namespace Lib.Release.Steps
             {
                 foreach (var testProjectName in args.ReleaseInfo.Tests)
                 {
-                    var csprojFile = args.LibRootDir!.ToDir(testProjectName).GetFiles("*.csproj").Single();
+                    var csprojFile = args.LibRootDir!.ToDir(testProjectName)!.GetFiles("*.csproj").Single();
                     var testCmd = @$"dotnet test ""{csprojFile.FullName}"" -c release";
-                    _log.Info($"Testing {csprojFile.FullName.Highlight()}");
+                    Log.Info($"Testing {csprojFile.FullName.Highlight()}");
 
                     var logger = CmdRun(testCmd, out var exitCode);
                     if (exitCode != 0 || logger.HasErrors)
@@ -31,7 +29,7 @@ namespace Lib.Release.Steps
             }
             else
             {
-                log.Info("No tests configured. Skipping tests...");
+                Log.Info("No tests configured. Skipping tests...");
             }
             return Task.FromResult(0);
         }
