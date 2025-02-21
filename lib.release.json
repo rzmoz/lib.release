@@ -2,8 +2,8 @@
   "releases": [
     {
       "name": "Lib.Release",
-      "version": "0.0.1",
-      "prerelease": "RC.2"
+      "version": "0.0.2",
+      "prerelease": ""
     }
   ],
   "tests": []
