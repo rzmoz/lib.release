@@ -9,7 +9,10 @@
 		<ToolCommandName>lib.release</ToolCommandName>
 		<PackageOutputPath>./bin/nupkg</PackageOutputPath>
 	</PropertyGroup>
-
+	<ItemGroup>
+		<None Remove="**/*.tmp" />
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="DotNet.Basics" Version="11.5.10" />
 		<PackageReference Include="DotNet.Basics.Cli" Version="11.6.7" />
