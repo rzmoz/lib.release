@@ -8,6 +8,7 @@
 		<PackAsTool>true</PackAsTool>
 		<ToolCommandName>lib.release</ToolCommandName>
 		<PackageOutputPath>./bin/nupkg</PackageOutputPath>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 	<ItemGroup>
 		<None Remove="**/*.tmp" />
