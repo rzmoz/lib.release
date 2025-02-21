@@ -25,10 +25,10 @@
 		<None Include="README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="DotNet.Basics" Version="11.5.10" />
-		<PackageReference Include="DotNet.Basics.Cli" Version="11.6.7" />
-		<PackageReference Include="DotNet.Basics.Pipelines" Version="11.6.2" />
-		<PackageReference Include="DotNet.Basics.Serilog" Version="4.6.6" />
+		<PackageReference Include="DotNet.Basics" Version="11.6.0" />
+		<PackageReference Include="DotNet.Basics.Cli" Version="11.7.0" />
+		<PackageReference Include="DotNet.Basics.Pipelines" Version="11.7.0" />
+		<PackageReference Include="DotNet.Basics.Serilog" Version="4.7.0" />
 		<PackageReference Include="LibGit2Sharp" Version="0.31.0" />
 	</ItemGroup>
 
