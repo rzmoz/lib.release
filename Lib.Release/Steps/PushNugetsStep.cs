@@ -6,6 +6,8 @@ namespace Lib.Release.Steps
 {
     public class PushNugetsStep(ILoog log) : CmdPromptStep<LibReleasePipelineArgs>(log)
     {
+        private readonly ILoog _log = log;
+
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
             return Task.FromResult(args.ReleaseInfo.Releases.ForEachParallel(r =>
@@ -20,11 +22,11 @@ namespace Lib.Release.Steps
 
                 if (logger.Info.ToString().Contains("Conflict", StringComparison.OrdinalIgnoreCase))
                 {
-                    log.Warning($"Conflict detected for {r.Name.Highlight()}. See log for details");
+                    _log.Warning($"Conflict detected for {r.Name.Highlight()}. See log for details");
                     return 400;
                 }
                 
-                log.Success($"{r.Name.Highlight()} was successfully released to {args.ReleaseInfo.Source}");
+                _log.Success($"{r.Name.Highlight()} was successfully released to {args.ReleaseInfo.Source}");
                 return 0;
 
             }).Sum());

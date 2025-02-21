@@ -10,8 +10,7 @@ namespace Lib.Release.Steps
     {
         protected override async Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
-            await nuget.InitAsync();
-            var pkgs = args.ReleaseInfo.Releases.ForEachParallel(r => nuget.Search(r.Name)).SelectMany(p => p).Distinct().ToDictionary(p => p.Name);
+            var pkgs = (await args.ReleaseInfo.Releases.ForEachParallelAsync(async r => await nuget.SearchAsync(r.Name))).Select(p => p).Distinct().ToDictionary(p => p.Name);
 
             var candidates = args.ReleaseInfo.Releases.ToList();
 
@@ -23,7 +22,7 @@ namespace Lib.Release.Steps
                 {
                     var comparisonVersion = SemVersion.Parse($"{candidate.Version}{(candidate.PreRelease.Any() ? $"+{candidate.PreRelease}" : "")}");
 
-                    if (comparisonVersion.Equals(latestPkg.Version))
+                    if (comparisonVersion.Equals(latestPkg.SemVersion))
                     {
                         args.ReleaseInfo.Releases.RemoveAt(args.ReleaseInfo.Releases.IndexOf(candidate.Name));
                         log.Info($"{candidate} {"already exists".Highlight()}. Removing from release.");

@@ -6,9 +6,8 @@ namespace Lib.Release
     public class NugetPackage
     {
         public string Name { get; set; } = string.Empty;
-        public SemVersion Version { get; set; } = new();
-        public long Downloads { get; set; }
-
+        public string Version { get; set; } = string.Empty;
+        public SemVersion SemVersion => Version;
 
         protected bool Equals(NugetPackage other)
         {
@@ -30,7 +29,7 @@ namespace Lib.Release
 
         public override string ToString()
         {
-            return $"{Name.Highlight()} | {Version.SemVer20String.Highlight()} | {Downloads.ToString().Highlight()}";
+            return $"{Name.Highlight()} | {SemVersion.SemVer20String.Highlight()}";
         }
     }
 }

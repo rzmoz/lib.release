@@ -12,7 +12,7 @@ namespace Lib.Release
                 .WithServices(services =>
                 {
                     services.AddPipelines();
-                    services.AddSingleton<Nuget>();
+                    services.AddScoped<Nuget>();
                 })
                 .Build();
 

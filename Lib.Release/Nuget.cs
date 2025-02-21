@@ -1,63 +1,43 @@
-﻿using DotNet.Basics.IO;
-using DotNet.Basics.Serilog.Looging;
-using DotNet.Basics.Sys;
+﻿using DotNet.Basics.Serilog.Looging;
 using DotNet.Basics.Sys.Text;
-using DotNet.Basics.Win;
 
 namespace Lib.Release
 {
     //https://learn.microsoft.com/en-us/nuget/reference/nuget-exe-cli-reference?tabs=windows
-    public class Nuget(ILoog log)
+    public class Nuget(ILoog log) : IDisposable
     {
-        private static readonly SysRegex _nugetPackageRegex = @"^> (?<name>.+?) \| (?<version>.+?) \| Downloads: (?<downloads>[0-9\.]+)";
+        private static readonly SysRegex _pkgVersionRegex = @"<span class=""install-command-row"">dotnet add package .+? --version (?<version>.+?)</span>";
+        private static readonly HttpClient _client = new();
 
-        private readonly FileApplication _nugetExe = new(".nuget");
-        private const string _fileName = "nuget.exe";
-        private FilePath _nugetFilePath => _nugetExe.InstallDir.ToFile(_fileName);
-        private const string _publicNugetSource = "https://api.nuget.org/v3/index.json";
-        private const string _nugetExeDownloadUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe";
+        private const string _nugetSearchBaseurl = "https://www.nuget.org/packages/";
 
-        public async Task InitAsync()
+        public async Task<NugetPackage> SearchAsync(string packageName, bool preRelease = true)
         {
-            _nugetExe.Install();
-            using var httpClient = new HttpClient();
-            await using var fileStream = await httpClient.GetStreamAsync(_nugetExeDownloadUrl);
-            await using var writer = _nugetFilePath.OpenWrite(FileMode.Create);
-            await fileStream.CopyToAsync(writer.BaseStream);
-            await writer.FlushAsync();
-            await fileStream.FlushAsync();
-            log.Verbose($"{_fileName.Highlight()} initialized");
-        }
+            var searchQueryUrl = $"{_nugetSearchBaseurl}{packageName}";
 
-        public IReadOnlyList<NugetPackage> Search(string packageName, bool preRelease = true, params string[] sources)
-        {
-            if (sources.Length == 0)
-                sources = [_publicNugetSource];
-
-            var sourcesString = sources.Select(s => $@"-Source ""{s}""").JoinString(" ");
-            var searchCmd = @$"{_nugetFilePath.FullName} search ""{packageName}"" -NonInteractive {(preRelease ? "-PreRelease " : "")}{sourcesString}";
-            log.Verbose(searchCmd);
-            var cmdLogger = new CmdPromptLogger();
-            cmdLogger.DebugLogged += log.Debug;
-            cmdLogger.InfoLogged += log.Debug;
-            cmdLogger.ErrorLogged += log.Error;
-            if (CmdPrompt.Run(searchCmd, cmdLogger) != 0 || cmdLogger.HasErrors)
-                throw new ApplicationException($"Failed to get nuget info for {packageName}. See log for details.");
-
-            var pkgMatches = _nugetPackageRegex.Matches(cmdLogger.Info.ToString());
-
-            return pkgMatches.Select(m =>
-            {
-                var pkg = new NugetPackage
+            log.Debug($"Searching for package: {searchQueryUrl}");
+            var response = await _client.GetAsync(searchQueryUrl);
+            if (!response.IsSuccessStatusCode)
+                return new NugetPackage
                 {
-                    Name = m.Groups["name"].Value,
-                    Version = m.Groups["version"].Value,
-                    Downloads = long.Parse(m.Groups["downloads"].Value.Remove(@"\."))
+                    Name = packageName,
+                    Version = "0.0.0"
                 };
 
-                log.Debug($"Package info: {pkg}");
-                return pkg;
-            }).ToList();
+            var html = await response.Content.ReadAsStringAsync();
+            var version = _pkgVersionRegex.Match(html);
+
+            log.Verbose($"{packageName.Highlight()} version resolved to: {version.Highlight()}");
+
+            return new NugetPackage
+            {
+                Name = packageName,
+                Version = version
+            };
+        }
+        public void Dispose()
+        {
+            _client.Dispose();
         }
     }
 }

@@ -3,7 +3,7 @@
     {
       "name": "Lib.Release",
       "version": "0.0.1",
-      "prerelease": "RC.1"
+      "prerelease": "RC.2"
     }
   ],
   "tests": []
