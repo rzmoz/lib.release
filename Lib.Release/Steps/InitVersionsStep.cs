@@ -14,7 +14,7 @@ namespace Lib.Release.Steps
 
             var candidates = args.ReleaseInfo.Releases.ToList();
 
-            log.Debug($"{"Resolving packages for release from:".Highlight()}\r\n{candidates.ToJson(true)}");
+            log.Debug($"Resolving packages for release from:\r\n{candidates.ToJson(true)}");
 
             foreach (var candidate in candidates)
             {

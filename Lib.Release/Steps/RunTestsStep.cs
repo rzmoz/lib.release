@@ -20,7 +20,7 @@ namespace Lib.Release.Steps
             {
                 var csprojFile = args.LibRootDir!.ToDir(testProjectName).GetFiles("*.csproj").Single();
                 var testCmd = @$"dotnet test ""{csprojFile.FullName}"" -c release";
-                _log.Info($"Testing {csprojFile.FullName}...");
+                _log.Info($"Testing {csprojFile.FullName.Highlight()}");
 
                 var logger = CmdRun(testCmd, out var exitCode);
                 if (exitCode != 0 || logger.HasErrors)
