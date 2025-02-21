@@ -7,6 +7,7 @@ namespace Lib.Release.Steps
     public class PushNugetsStep(ILoog log) : CmdPromptStep<LibReleasePipelineArgs>(log)
     {
         private readonly ILoog _log = log;
+        public const string NugetSource = "https://api.nuget.org/v3/index.json";
 
         protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
@@ -14,11 +15,11 @@ namespace Lib.Release.Steps
             {
                 var nugetFile = r.PackDir!.GetFiles("*.nupkg").Single();
 
-                var pushCmd = @$"dotnet nuget push ""{nugetFile.FullName}"" --api-key ""{args.PublishKey}"" --source ""{args.ReleaseInfo.Source}"" --skip-duplicate";
+                var pushCmd = @$"dotnet nuget push ""{nugetFile.FullName}"" --api-key ""{args.PublishKey}"" --source ""{NugetSource}"" --skip-duplicate";
 
                 var logger = CmdRun(pushCmd, out var exitCode);
                 if (exitCode != 0 || logger.HasErrors)
-                    throw new ApplicationException($"Failed to push {nugetFile.FullName} to {args.ReleaseInfo.Source}. See log for details.");
+                    throw new ApplicationException($"Failed to push {nugetFile.FullName} to {NugetSource}. See log for details.");
 
                 if (logger.Info.ToString().Contains("Conflict", StringComparison.OrdinalIgnoreCase))
                 {
@@ -26,7 +27,7 @@ namespace Lib.Release.Steps
                     return 400;
                 }
                 
-                _log.Success($"{r.Name.Highlight()} was successfully released to {args.ReleaseInfo.Source}");
+                _log.Success($"{r.Name.Highlight()} was successfully released to {NugetSource}");
                 return 0;
 
             }).Sum());
