@@ -63,7 +63,7 @@ namespace Lib.Release.Steps
             if (libInfoFile == null)
                 throw new FileNotFoundException(_libReleaseInfoFileName);
 
-            args.ReleaseInfo = libInfoFile.ReadAllText()!.FromJson<LibReleaseInfo>();
+            args.ReleaseInfo = libInfoFile.ReadAllText()!.FromJson<LibReleaseInfo>()!;
             log.Verbose($"{nameof(args.ReleaseInfo)}:{args.ReleaseInfo.ToJson(true)}");
             return 0;
         }
