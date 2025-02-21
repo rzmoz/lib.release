@@ -10,7 +10,11 @@ namespace Lib.Release.Steps
     {
         protected override async Task<int> RunImpAsync(LibReleasePipelineArgs args)
         {
-            var pkgs = (await args.ReleaseInfo.Releases.ForEachParallelAsync(async r => await nuget.SearchAsync(r.Name))).Select(p => p).Distinct().ToDictionary(p => p.Name);
+            var pkgs = (await args.ReleaseInfo.Releases
+                .ForEachParallelAsync(async r => await nuget.SearchAsync(r.Name)))
+                .Select(p => p)
+                .Distinct()
+                .ToDictionary(p => p.Name);
 
             var candidates = args.ReleaseInfo.Releases.ToList();
 

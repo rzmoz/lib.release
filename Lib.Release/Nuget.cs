@@ -25,6 +25,7 @@ namespace Lib.Release
                 };
 
             var html = await response.Content.ReadAsStringAsync();
+            log.Verbose(html);
             var version = _pkgVersionRegex.Match(html);
 
             log.Verbose($"{packageName.Highlight()} version resolved to: {version.Highlight()}");
