@@ -29,7 +29,7 @@ namespace Lib.Release.Steps
                         continue;
                     }
                 }
-                log.Success($"{candidate} approved for release.");
+                log.Success($"{candidate.ToString().Highlight()} approved for release.");
 
             }
 

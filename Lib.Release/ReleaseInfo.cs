@@ -42,7 +42,7 @@ namespace Lib.Release
 
         public override string ToString()
         {
-            return $"{Name}: {GetSemVer().SemVer20String}";
+            return $"{Name} {GetSemVer().SemVer20String}";
         }
     }
 }

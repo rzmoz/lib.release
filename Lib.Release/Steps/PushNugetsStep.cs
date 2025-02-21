@@ -21,14 +21,21 @@ namespace Lib.Release.Steps
                 if (exitCode != 0 || logger.HasErrors)
                     throw new ApplicationException($"Failed to push {nugetFile.FullName} to {NugetSource}. See log for details.");
 
-                if (logger.Info.ToString().Contains("Conflict", StringComparison.OrdinalIgnoreCase))
+                var info = logger.Info.ToString();
+                
+                if (info.Contains("Your package was pushed.", StringComparison.OrdinalIgnoreCase))
                 {
-                    _log.Warning($"Conflict detected for {r.Name.Highlight()}. See log for details");
+                    _log.Success($"{r.ToString().Highlight()} was successfully released to {NugetSource}");
+                    return 0;
+                }
+                if (info.Contains("Conflict", StringComparison.OrdinalIgnoreCase))
+                {
+                    _log.Warning($"Conflict detected for {r.ToString().Highlight()}. See log for details");
                     return 400;
                 }
-                
-                _log.Success($"{r.Name.Highlight()} was successfully released to {NugetSource}");
-                return 0;
+                _log.Warning($"Error detected for {r.ToString().Highlight()}. See log for details");
+                return 400;
+
 
             }).Sum());
         }
