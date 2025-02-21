@@ -1,42 +1,60 @@
-﻿using DotNet.Basics.Serilog.Looging;
-using DotNet.Basics.Sys.Text;
+﻿using System.Text.Json.Nodes;
+using DotNet.Basics.Serilog.Looging;
+using static System.Net.WebRequestMethods;
 
 namespace Lib.Release
 {
     //https://learn.microsoft.com/en-us/nuget/reference/nuget-exe-cli-reference?tabs=windows
     public class Nuget(ILoog log) : IDisposable
     {
-        private static readonly SysRegex _pkgVersionRegex = @"dotnet add package .+? --version (?<version>.+?)</span>";
-        private static readonly SysRegex _toolVersionRegex = @"dotnet tool install .+? --version (?<version>.+?)</span>";
         private static readonly HttpClient _client = new();
 
-        private const string _nugetSearchBaseurl = "https://www.nuget.org/packages/";
+        private const string _nugetDotOrgSource = "https://api.nuget.org/v3/index.json";
 
-        public async Task<NugetPackage> SearchAsync(string packageName, bool preRelease = true)
+        public async Task<NugetPackage> SearchAsync(string packageName, bool preRelease = true, string? source = null)
         {
-            var searchQueryUrl = $"{_nugetSearchBaseurl}{packageName}";
-
-            log.Debug($"Searching for package: {searchQueryUrl}");
-            var response = await _client.GetAsync(searchQueryUrl);
-            if (!response.IsSuccessStatusCode)
-                return new NugetPackage
-                {
-                    Name = packageName,
-                    Version = "0.0.0"
-                };
-
-            var html = await response.Content.ReadAsStringAsync();
-            var version = _pkgVersionRegex.Match(html);
-            if (string.IsNullOrEmpty(version))
-                version = _toolVersionRegex.Match(html);
-            log.Debug($"{packageName.Highlight()} version resolved to: {version.Highlight()}");
-
-            return new NugetPackage
+            var latest = await GetLatestPackageInfoAsync(packageName, preRelease, source) ?? new NugetPackage
             {
                 Name = packageName,
-                Version = version
+                Version = "0.0.0"
             };
+
+            log.Debug($"{latest.Name.Highlight()} version resolved to: {latest.Version.Highlight()}");
+            return latest;
         }
+
+        private async Task<NugetPackage?> GetLatestPackageInfoAsync(string packageName, bool preRelease = true, string? source = null)
+        {
+            var searchUrl = await GetSearchQueryUrlAsync(source);
+            var query = $"{searchUrl}?take=1&q={packageName}&prerelease={preRelease}";
+            log.Debug($"Searching for package: {packageName} at {searchUrl}");
+            var response = await _client.GetAsync(query);
+            var json = await JsonNode.ParseAsync(await response.Content.ReadAsStreamAsync())!;
+            var data = json!["data"]!.AsArray()!;
+            return !data.Any()
+                ? null
+                : new NugetPackage
+                {
+                    Name = packageName,
+                    Version = data!.First()!["version"]!.GetValue<string>()
+                };
+        }
+
+        private async Task<string> GetSearchQueryUrlAsync(string? source)
+        {
+            source ??= _nugetDotOrgSource;
+            var response = await _client.GetAsync(source);
+            var json = await JsonNode.ParseAsync(await response.Content.ReadAsStreamAsync())!;
+            var resources = json!["resources"]!.AsArray();
+            foreach (var resource in resources)
+            {
+                if (resource!["@type"]!.GetValue<string>().Equals("SearchQueryService"))
+                    return resource["@id"]!.GetValue<string>();
+            }
+            throw new ArgumentException($"Failed to find SearchQueryService in {source}");
+        }
+
+
         public void Dispose()
         {
             _client.Dispose();
