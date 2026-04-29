@@ -5,11 +5,11 @@ using Lib.Release.Steps;
 
 namespace Lib.Release
 {
-    public class ReleasePipeline : Pipeline<LibReleasePipelineArgs>
+    public class ReleasePipeline : Pipeline<ReleaseCliSettings>
     {
         public ReleasePipeline(IServiceProvider services) : base(services)
         {
-            AddStep<AssertLibRootDirStep>();
+            
             AddStep<InitForReleaseStep>();
             AddStep<InitVersionsStep>();
             AddStep<ApplyVersionStep>();
@@ -18,7 +18,7 @@ namespace Lib.Release
             AddStep<PushNugetsStep>();
         }
 
-        protected override async Task<int> InnerRunAsync(LibReleasePipelineArgs args)
+        protected override async Task<int> InnerRunAsync(ReleaseCliSettings args)
         {
             try
             {
@@ -32,9 +32,7 @@ namespace Lib.Release
                     r.TempProjectFile!.DeleteIfExists();
                     return 0;
                 });
-
             }
-
         }
     }
 }

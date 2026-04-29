@@ -1,15 +1,15 @@
-﻿using DotNet.Basics.Cli;
+﻿using DotNet.Basics.Diagnostics;
 using DotNet.Basics.IO;
 using DotNet.Basics.Pipelines;
-using DotNet.Basics.Serilog.Looging;
 using DotNet.Basics.Sys;
 using DotNet.Basics.Win;
+using Microsoft.Extensions.Logging;
 
 namespace Lib.Release.Steps
 {
-    public class RunTestsStep(ILoog log) : PipelineStep<LibReleasePipelineArgs>
+    public class RunTestsStep(ILogger log) : PipelineStep<ReleaseCliSettings>
     {
-        protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
+        protected override Task<int> RunImpAsync(ReleaseCliSettings args)
         {
             if (args.SkipTests)
             {
@@ -21,16 +21,16 @@ namespace Lib.Release.Steps
             {
                 foreach (var testProjectName in args.ReleaseInfo.Tests)
                 {
-                    var csprojFile = args.LibRootDir!.ToDir(testProjectName)!.GetFiles("*.csproj").Single();
+                    var csprojFile = args.Lib.ToDir(testProjectName)!.GetFiles("*.csproj").Single();
                     var testCmd = @$"dotnet test ""{csprojFile.FullName}"" -c release";
                     log.Debug($"Testing {csprojFile.FullName.Highlight()}");
 
-                    if (CmdPrompt.Run(testCmd, log.WithPromptLogger()) != 0)
-                        throw new ApplicationException($"Tests failed in {csprojFile.Name}. See log for details.");
+                    if (CmdPrompt.Run(testCmd, log) != 0)
+                        throw new ApplicationException($"Tests failed in {csprojFile.Name}. See log for details");
                 }
             }
             else
-                log.Warning("No tests configured. Skipping tests...");
+                log.Warn("No tests configured. Skipping tests...");
             
             return Task.FromResult(0);
         }

@@ -1,5 +1,5 @@
 ﻿using DotNet.Basics.Sys;
-using DotNet.Basics.Serilog.Looging;
+using DotNet.Basics.Diagnostics;
 
 namespace Lib.Release
 {

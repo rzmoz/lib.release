@@ -1,22 +1,23 @@
 ﻿using DotNet.Basics.Collections;
 using DotNet.Basics.IO;
 using DotNet.Basics.Pipelines;
-using DotNet.Basics.Serilog.Looging;
+using DotNet.Basics.Diagnostics;
 using DotNet.Basics.Sys;
+using Microsoft.Extensions.Logging;
 using System.Xml;
 
 namespace Lib.Release.Steps
 {
-    public class ApplyVersionStep(ILoog log) : PipelineStep<LibReleasePipelineArgs>
+    public class ApplyVersionStep(ILogger log) : PipelineStep<ReleaseCliSettings>
     {
         private const string _versionNodeName = "Version";
         private static readonly string[] _versionNodeNames = [_versionNodeName, "AssemblyVersion", "FileVersion"];
 
-        protected override Task<int> RunImpAsync(LibReleasePipelineArgs args)
+        protected override Task<int> RunImpAsync(ReleaseCliSettings args)
         {
             var result = args.ReleaseInfo.Releases.ForEachParallel(r =>
             {
-                var projFile = args.LibRootDir!.ToFile(r.Name, $"{r.Name}.csproj");
+                var projFile = args.Lib.ToFile(r.Name, $"{r.Name}.csproj");
 
                 if (projFile.Exists())
                 {
@@ -24,7 +25,7 @@ namespace Lib.Release.Steps
                     r.ProjectFile = projFile;//set for final cleanup
                     return PatchVersions(r);
                 }
-                log.Fatal($"Project file {projFile} not found!");
+                log.Critical($"Project file {projFile} not found!");
                 return 400;
             }).Sum();
             return Task.FromResult(result);
@@ -39,7 +40,7 @@ namespace Lib.Release.Steps
             var propertyGroupNode = xml.SelectSingleNode("//Project/PropertyGroup");
             if (propertyGroupNode == null)
             {
-                log.Error($"Xml format in {r.ProjectFile.FullName.Highlight()} not recognized.");
+                log.Error($"Xml format in {r.ProjectFile.FullName.Highlight()} not recognized");
                 return 400;
             }
 

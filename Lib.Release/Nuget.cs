@@ -1,10 +1,11 @@
-﻿using System.Text.Json.Nodes;
-using DotNet.Basics.Serilog.Looging;
+﻿using Microsoft.Extensions.Logging;
+using DotNet.Basics.Diagnostics;
+using System.Text.Json.Nodes;
 
 namespace Lib.Release
 {
     //https://learn.microsoft.com/en-us/nuget/reference/nuget-exe-cli-reference?tabs=windows
-    public class Nuget(ILoog log) : IDisposable
+    public class Nuget(ILogger log) : IDisposable
     {
         private static readonly HttpClient _client = new();
 

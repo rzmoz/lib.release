@@ -1,14 +1,18 @@
-﻿using DotNet.Basics.Collections;
+﻿using DotNet.Basics.Cli.Logging;
+using DotNet.Basics.Collections;
+using DotNet.Basics.Diagnostics;
 using DotNet.Basics.Pipelines;
-using DotNet.Basics.Serilog.Looging;
 using DotNet.Basics.Sys;
 using DotNet.Basics.Sys.Text;
+using Microsoft.Extensions.Logging;
+using Spectre.Console;
+using Spectre.Console.Json;
 
 namespace Lib.Release.Steps
 {
-    public class InitVersionsStep(ILoog log, Nuget nuget) : PipelineStep<LibReleasePipelineArgs>
+    public class InitVersionsStep(DevConsoleLogger log, Nuget nuget) : PipelineStep<ReleaseCliSettings>
     {
-        protected override async Task<int> RunImpAsync(LibReleasePipelineArgs args)
+        protected override async Task<int> RunImpAsync(ReleaseCliSettings args)
         {
             var packages = (await args.ReleaseInfo.Releases
                 .ForEachParallelAsync(async r => await nuget.SearchAsync(r.Name)))
@@ -17,9 +21,9 @@ namespace Lib.Release.Steps
                 .ToDictionary(p => p.Name);
 
             var candidates = args.ReleaseInfo.Releases.ToList();
-
-            log.Verbose($"Resolving packages for release from:\r\n{candidates.ToJson(true)}");
-
+            log.Debug("Resolving packages for release from:");
+            log.Write(LogLevel.Debug, new JsonText(candidates.ToJson()));
+            log.Write(LogLevel.Debug, Text.NewLine);
             foreach (var candidate in candidates)
             {
                 if (packages.TryGetValue(candidate.Name, out var latestPkg))
@@ -29,18 +33,18 @@ namespace Lib.Release.Steps
                     if (comparisonVersion.Equals(latestPkg.SemVersion))
                     {
                         args.ReleaseInfo.Releases.RemoveAt(args.ReleaseInfo.Releases.IndexOf(candidate.Name));
-                        log.Warning($"{candidate} {"already exists".Highlight()}. Ignoring in release.");
+                        log.Info($"{candidate} already exists. Ignoring in release");
                         continue;
                     }
                 }
-                log.Info($"{candidate.ToString().Highlight()} approved for release.");
+                log.Info($"{candidate.ToString().Highlight()} approved for release!");
             }
 
             if (args.ReleaseInfo.Releases.Any())
                 return 0;
-            
-            log.Error($"No release candidates. Aborting release");
-            return 400;
+
+            log.Warn($"No release candidates. Aborting release");
+            return 409;
         }
     }
 }

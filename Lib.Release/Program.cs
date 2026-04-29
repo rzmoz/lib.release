@@ -8,15 +8,16 @@ namespace Lib.Release
     {
         static async Task<int> Main(string[] args)
         {
-            await using var app = new CliHostBuilder(args)
+            var app = new CliHostBuilder()
                 .WithServices(services =>
                 {
                     services.AddPipelines();
                     services.AddScoped<Nuget>();
                 })
+                .WithCommand<ReleaseCliCommand>(true)
                 .Build();
 
-            return await app.RunPipelineAsync<ReleasePipeline>();
+            return await app.RunAsync(args);
         }
     }
 }
