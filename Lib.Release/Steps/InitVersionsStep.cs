@@ -4,13 +4,12 @@ using DotNet.Basics.Diagnostics;
 using DotNet.Basics.Pipelines;
 using DotNet.Basics.Sys;
 using DotNet.Basics.Sys.Text;
-using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using Spectre.Console.Json;
 
 namespace Lib.Release.Steps
 {
-    public class InitVersionsStep(DevConsoleLogger log, Nuget nuget) : PipelineStep<ReleaseCliSettings>
+    public class InitVersionsStep(DevConsole log, Nuget nuget) : PipelineStep<ReleaseCliSettings>
     {
         protected override async Task<int> RunImpAsync(ReleaseCliSettings args)
         {
@@ -22,8 +21,11 @@ namespace Lib.Release.Steps
 
             var candidates = args.ReleaseInfo.Releases.ToList();
             log.Debug("Resolving packages for release from:");
-            log.Write(LogLevel.Debug, new JsonText(candidates.ToJson()));
-            log.Write(LogLevel.Debug, Text.NewLine);
+            if (log.MinimumLogLevel <= Microsoft.Extensions.Logging.LogLevel.Debug)
+            {
+                log.Write(new JsonText(candidates.ToJson()));
+                log.Write(Text.NewLine);
+            }
             foreach (var candidate in candidates)
             {
                 if (packages.TryGetValue(candidate.Name, out var latestPkg))
