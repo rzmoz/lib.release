@@ -23,8 +23,8 @@ namespace Lib.Release.Steps
             log.Debug("Resolving packages for release from:");
             if (log.MinimumLogLevel <= Microsoft.Extensions.Logging.LogLevel.Debug)
             {
-                log.Write(new JsonText(candidates.ToJson()));
-                log.Write(Text.NewLine);
+                DevConsole.Console.ForceWrite(new JsonText(candidates.ToJson()));
+                DevConsole.Console.ForceWrite(Text.NewLine);
             }
             foreach (var candidate in candidates)
             {
