@@ -35,7 +35,7 @@ namespace Lib.Release.Steps
                     if (comparisonVersion.Equals(latestPkg.SemVersion))
                     {
                         args.ReleaseInfo.Releases.RemoveAt(args.ReleaseInfo.Releases.IndexOf(candidate.Name));
-                        log.Info($"{candidate} already exists. Ignoring in release");
+                        log.Debug($"{candidate} already exists. Ignoring in release");
                         continue;
                     }
                 }
