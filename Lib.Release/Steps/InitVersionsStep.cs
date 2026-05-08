@@ -39,7 +39,7 @@ namespace Lib.Release.Steps
                         continue;
                     }
                 }
-                log.Info($"{candidate.ToString().Highlight()} approved for release!");
+                log.Info($"{candidate} approved for release!");
             }
 
             if (args.ReleaseInfo.Releases.Any())

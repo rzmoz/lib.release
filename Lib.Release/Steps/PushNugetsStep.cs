@@ -42,16 +42,16 @@ namespace Lib.Release.Steps
 
                     if (info.Contains("Your package was pushed.", StringComparison.OrdinalIgnoreCase))
                     {
-                        log.Success($"{r.ToString().Highlight()} successfully released");
+                        log.Success($"{r} successfully released");
                     }
                     else if (info.Contains("Conflict", StringComparison.OrdinalIgnoreCase))
                     {
-                        log.Warn($"Conflict detected for {r.ToString().Highlight()}");
+                        log.Warn($"Conflict detected for {r}");
                         exitCode += 400;
                     }
                     else
                     {
-                        log.Error($"Error detected for {r.ToString().Highlight()}");
+                        log.Error($"Error detected for {r}");
                         exitCode += 400;
                     }
                 });
